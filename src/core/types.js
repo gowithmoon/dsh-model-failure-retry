@@ -6,9 +6,10 @@
  * @typedef {{ provider: string, model: string }} ModelRef
  *
  * @typedef {object} RetryPolicy
- * @property {'exponential'} kind   Delay algorithm. #4 adds 'fixed' | 'linear' | 'custom'.
+ * @property {'fixed' | 'linear' | 'exponential' | 'custom'} kind   Growth kind.
  * @property {number} initialDelayMs
- * @property {number} multiplier
+ * @property {number} multiplier     Exponential only.
+ * @property {number[]} [sequenceMs] Custom only: the waits in order; the last repeats.
  * @property {number} maxDelayMs     Cap for a single wait; also truncates Retry-After.
  * @property {number} maxAttempts    Retries allowed per request × model.
  * @property {number} jitterRatio    0..1, symmetric: delay × (1 ± ratio).

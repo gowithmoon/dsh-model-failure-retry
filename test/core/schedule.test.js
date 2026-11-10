@@ -50,3 +50,69 @@ describe('nextDelay', () => {
     expect(nextDelay(DEFAULT_POLICY, 1, { retryAfterMs: Number.NaN, random: noJitter })).toBe(5000);
   });
 });
+
+const policyOf = (overrides) => ({ ...DEFAULT_POLICY, jitterRatio: 0, ...overrides });
+const delays = (policy) => retrySchedule(policy).map((s) => s.delayMs);
+
+describe('growth kinds', () => {
+  it('fixed waits the first delay every time', () => {
+    expect(delays(policyOf({ kind: 'fixed', initialDelayMs: 3000, maxAttempts: 4 }))).toEqual([3000, 3000, 3000, 3000]);
+  });
+
+  it('linear adds the first delay each time', () => {
+    expect(delays(policyOf({ kind: 'linear', initialDelayMs: 5000, maxAttempts: 4 }))).toEqual([5000, 10000, 15000, 20000]);
+  });
+
+  it('exponential multiplies by the multiplier', () => {
+    expect(delays(policyOf({ kind: 'exponential', initialDelayMs: 1000, multiplier: 3, maxAttempts: 4 }))).toEqual([1000, 3000, 9000, 27000]);
+  });
+
+  it('caps every kind at the single-wait maximum', () => {
+    expect(delays(policyOf({ kind: 'linear', initialDelayMs: 20000, maxDelayMs: 50000, maxAttempts: 4 }))).toEqual([20000, 40000, 50000, 50000]);
+    expect(delays(policyOf({ kind: 'fixed', initialDelayMs: 90000, maxDelayMs: 60000, maxAttempts: 2 }))).toEqual([60000, 60000]);
+  });
+});
+
+describe('custom sequence', () => {
+  const custom = (sequenceMs, maxAttempts) => policyOf({ kind: 'custom', sequenceMs, maxAttempts });
+
+  it('uses the sequence as written', () => {
+    expect(delays(custom([5000, 10000, 30000, 60000], 4))).toEqual([5000, 10000, 30000, 60000]);
+  });
+
+  it('repeats the last delay when shorter than the max attempts', () => {
+    expect(delays(custom([5000, 10000], 4))).toEqual([5000, 10000, 10000, 10000]);
+  });
+
+  it('stops at the max attempts when longer', () => {
+    expect(delays(custom([1000, 2000, 3000, 4000], 2))).toEqual([1000, 2000]);
+  });
+
+  it('is still capped at the single-wait maximum', () => {
+    expect(delays({ ...custom([5000, 120000], 2), maxDelayMs: 60000 })).toEqual([5000, 60000]);
+  });
+
+  it('falls back to the first delay when the sequence is empty', () => {
+    expect(delays({ ...custom([], 2), initialDelayMs: 7000 })).toEqual([7000, 7000]);
+  });
+
+  it('drives the runtime wait too', () => {
+    expect(nextDelay(custom([5000, 10000], 4), 3, { random: noJitter })).toBe(10000);
+  });
+});
+
+describe('jitter boundaries', () => {
+  it('no jitter gives a zero-width window and an exact wait', () => {
+    const policy = policyOf({ jitterRatio: 0 });
+    expect(retrySchedule(policy)[0]).toEqual({ attempt: 1, delayMs: 5000, minMs: 5000, maxMs: 5000 });
+    expect(nextDelay(policy, 1, { random: () => 0 })).toBe(5000);
+    expect(nextDelay(policy, 1, { random: () => 0.999 })).toBe(5000);
+  });
+
+  it('100% jitter spans from zero to double, still capped', () => {
+    const policy = policyOf({ jitterRatio: 1 });
+    expect(retrySchedule(policy)[0]).toEqual({ attempt: 1, delayMs: 5000, minMs: 0, maxMs: 10000 });
+    expect(nextDelay(policy, 1, { random: () => 0 })).toBe(0);
+    expect(nextDelay(policy, 5, { random: () => 0.999 })).toBe(60000);
+  });
+});

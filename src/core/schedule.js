@@ -2,7 +2,9 @@
  * Retry schedule: the wait before each retry, derived from a retry policy.
  * Shared by the settings timeline (#4) and the runtime.
  *
- * Extension point (#4): add a branch per policy kind in `baseDelay`.
+ * Growth kinds: fixed (initial every time), linear (initial × n), exponential
+ * (initial × multiplier^(n-1)), custom (`sequenceMs`, last value repeats).
+ * Every wait is capped at `maxDelayMs`.
  */
 
 /**
@@ -11,8 +13,25 @@
  * @param {number} attempt
  */
 function baseDelay(policy, attempt) {
-  const raw = policy.initialDelayMs * policy.multiplier ** (attempt - 1);
-  return Math.min(raw, policy.maxDelayMs);
+  return Math.min(rawDelay(policy, attempt), policy.maxDelayMs);
+}
+
+/** @param {import('./types.js').RetryPolicy} policy @param {number} attempt */
+function rawDelay(policy, attempt) {
+  switch (policy.kind) {
+    case 'fixed':
+      return policy.initialDelayMs;
+    case 'linear':
+      return policy.initialDelayMs * attempt;
+    case 'custom': {
+      // Shorter than maxAttempts: keep repeating the last delay; longer: the tail is never reached.
+      const seq = policy.sequenceMs ?? [];
+      if (seq.length === 0) return policy.initialDelayMs;
+      return seq[Math.min(attempt, seq.length) - 1];
+    }
+    default:
+      return policy.initialDelayMs * policy.multiplier ** (attempt - 1);
+  }
 }
 
 /**
