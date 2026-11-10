@@ -76,6 +76,12 @@ export function installStats(ctx, { decisionEvent, retentionDays, rules }) {
       return () => clearInterval(timer);
     }, 'model-failure-retry: stats retention');
   });
+  // Kept on purpose (S12): the same root accessor dsh-typert-protocol's
+  // `provideInvocationAccessor` installs for every RemoteService, which this
+  // Service stands in for (we do not depend on that package). The Remote
+  // gateway reads `ctx.invocation`; without it, reading it outside a call
+  // throws reflect's "cannot get property" instead of `undefined`. Idempotent
+  // and identical to DSH's own, so it changes nothing when typert set it first.
   if (!Object.hasOwn(ctx.root.reflect.props, 'invocation')) ctx.root.accessor('invocation', { get: () => undefined });
   new StatsService(ctx, store);
   ctx.inject(['typert'], (sub) => {
