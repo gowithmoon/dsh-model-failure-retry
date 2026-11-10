@@ -16,14 +16,29 @@ const toggle = (value) => z.boolean().default(value).volatile();
 
 const Category = z.object({ enabled: toggle(true) });
 
-export const Policy = z.object({
-  kind: z.union(['exponential']).default(DEFAULT_POLICY.kind).volatile(),
-  initialDelayMs: z.natural().default(DEFAULT_POLICY.initialDelayMs).volatile(),
-  multiplier: z.number().min(1).default(DEFAULT_POLICY.multiplier).volatile(),
-  maxDelayMs: z.natural().default(DEFAULT_POLICY.maxDelayMs).volatile(),
-  maxAttempts: z.natural().default(DEFAULT_POLICY.maxAttempts).volatile(),
-  jitterRatio: z.number().min(0).max(1).default(DEFAULT_POLICY.jitterRatio).volatile(),
-  honorRetryAfter: toggle(DEFAULT_POLICY.honorRetryAfter),
+const KINDS = ['fixed', 'linear', 'exponential', 'custom'];
+
+/**
+ * Retry policy fields. `wrap` makes each field volatile for the global policy;
+ * inside an override (already within the volatile `overrides` array) the
+ * fields stay plain.
+ */
+const policyShape = (wrap) => ({
+  kind: wrap(z.union(KINDS).default(DEFAULT_POLICY.kind)),
+  initialDelayMs: wrap(z.natural().default(DEFAULT_POLICY.initialDelayMs)),
+  multiplier: wrap(z.number().min(1).default(DEFAULT_POLICY.multiplier)),
+  maxDelayMs: wrap(z.natural().default(DEFAULT_POLICY.maxDelayMs)),
+  maxAttempts: wrap(z.natural().default(DEFAULT_POLICY.maxAttempts)),
+  jitterRatio: wrap(z.number().min(0).max(1).default(DEFAULT_POLICY.jitterRatio)),
+  honorRetryAfter: wrap(z.boolean().default(DEFAULT_POLICY.honorRetryAfter)),
+  sequenceMs: wrap(z.array(z.natural()).default([...DEFAULT_POLICY.sequenceMs])),
+});
+
+export const Policy = z.object(policyShape((s) => s.volatile()));
+
+const Override = z.object({
+  match: z.string().default('*/*'),
+  policy: z.object(policyShape((s) => s)),
 });
 
 export const Config = z.object({
@@ -33,6 +48,7 @@ export const Config = z.object({
     transient: Category,
   }),
   policy: Policy,
+  overrides: z.array(Override).default([]).volatile(),
 });
 
 /**
@@ -48,5 +64,6 @@ export function snapshotConfig(config) {
       transient: read(config.categories.transient),
     },
     policy: read(config.policy),
+    overrides: config.overrides.get(),
   };
 }

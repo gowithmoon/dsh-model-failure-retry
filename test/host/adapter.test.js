@@ -139,6 +139,46 @@ describe('agent/request-error adapter', () => {
   });
 });
 
+/** Resolve to the ms a dispatch waited before settling (fake timers, 100ms resolution). */
+async function waitedMs(promise) {
+  let done = false;
+  promise.finally(() => { done = true; });
+  let waited = 0;
+  while (!done) { await vi.advanceTimersByTimeAsync(100); waited += 100; }
+  await promise;
+  return waited;
+}
+
+describe('retry policy overrides', () => {
+  const config = {
+    policy: { kind: 'fixed', initialDelayMs: 2000, jitterRatio: 0 },
+    overrides: [
+      { match: 'relay/*', policy: { kind: 'fixed', initialDelayMs: 30000, jitterRatio: 0, maxAttempts: 1 } },
+    ],
+  };
+
+  it('waits by the override policy on a matching model', async () => {
+    await mount(config);
+    const agent = host.createAgent({ provider: 'relay', model: 'gpt-4o' });
+    expect(await waitedMs(host.requestError(agent, { code: 'RATE_LIMIT' }))).toBe(30000);
+    await expect(host.requestError(agent, { code: 'RATE_LIMIT' })).resolves.toBeUndefined(); // override allows 1 retry
+  });
+
+  it('waits by the global policy on a model no override matches', async () => {
+    await mount(config);
+    const agent = host.createAgent({ provider: 'deepseek', model: 'deepseek-chat' });
+    expect(await waitedMs(host.requestError(agent, { code: 'RATE_LIMIT' }))).toBe(2000);
+  });
+
+  it('applies a config change to the next failure', async () => {
+    const fiber = await mount(config);
+    const agent = host.createAgent({ provider: 'deepseek', model: 'deepseek-chat' });
+    expect(await waitedMs(host.requestError(agent, { code: 'RATE_LIMIT' }, { step: 1 }))).toBe(2000);
+    await fiber.update({ ...config, overrides: [{ match: 'deepseek/*', policy: { kind: 'fixed', initialDelayMs: 9000, jitterRatio: 0 } }] });
+    expect(await waitedMs(host.requestError(agent, { code: 'RATE_LIMIT' }, { step: 2 }))).toBe(9000);
+  });
+});
+
 describe('package wiring', () => {
   it('exposes the Host plugin from the package root under the patch entry', async () => {
     const root = await import('../../index.js');
