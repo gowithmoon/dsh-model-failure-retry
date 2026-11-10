@@ -17,7 +17,9 @@
 
 import { randomUUID } from 'node:crypto';
 
-export const STATUS_PROJECTION = 'modelFailureRetry';
+import { STATUS_PROJECTION } from '../status-projection-key.js';
+
+export { STATUS_PROJECTION };
 /** `llm/retry` policy keys the adapter writes: `${POLICY_KEY_PREFIX}${category}`. */
 export const POLICY_KEY_PREFIX = 'model-failure-retry:';
 export const FALLBACK_SOURCE_KIND = 'model-fallback';

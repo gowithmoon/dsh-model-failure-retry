@@ -99,4 +99,27 @@ describe('client bundle', () => {
     expect(calls).toHaveLength(1);
     expect(statsController.getSnapshot()).toMatchObject({ status: 'ready', result: { summary: { retries: 2 } } });
   });
+
+  it('docks the status line above the composer of each session, and stops through the conversation service', async () => {
+    const { exports } = loadBundle();
+    const host = fakeClientCtx();
+    const injections = [];
+    host.ctx.inject = (keys, fn) => injections.push({ keys, fn });
+    exports.apply(host.ctx);
+    const docks = [];
+    const cancelled = [];
+    const sub = {
+      effect: (fn) => fn(),
+      slots: { inject: (slot, fn) => { docks.push({ slot, ...fn() }); return () => {}; }, register: host.ctx.slots.register },
+      sessions: { scope: (id) => ({ get: (name) => (name === 'conversation' ? { cancel: async () => { cancelled.push(id); } } : undefined) }) },
+    };
+    injections.find((i) => i.keys.includes('sessions')).fn(sub);
+    expect(docks).toHaveLength(1);
+    const [{ slot, options, component }] = docks;
+    expect(slot).toBe('conversation.input.dock');
+    expect(options).toMatchObject({ name: 'conversation.input.dock', id: 'model-failure-retry-status', locale: 'dsh-model-failure-retry' });
+    expect(typeof component).toBe('function');
+    await options.inject('s1').onStop();
+    expect(cancelled).toEqual(['s1']);
+  });
 });

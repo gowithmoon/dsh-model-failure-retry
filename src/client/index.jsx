@@ -12,6 +12,7 @@ import { createSwitchBackController } from './switch-back-controller.js';
 import { createStatsController } from './stats-controller.js';
 import { STATS_CONTRIBUTION, STATS_SERVICE } from '../stats-remote.js';
 import { Section } from './Section.jsx';
+import { installStatusDock } from './status-dock.js';
 
 const NS = 'dsh-model-failure-retry';
 
@@ -48,6 +49,7 @@ export function apply(ctx) {
       inner.effect(() => () => statsController.setLoader(undefined), 'model-failure-retry: stats loader');
     });
   });
+  installStatusDock(ctx, NS);
   ctx.effect(
     () => ctx.configForms.whileServed([ENTRY_ID], () => ctx.slots.inject('settings.section', () => ctx.slots.register({
       name: 'settings.section',
