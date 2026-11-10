@@ -41,6 +41,21 @@ describe('default classification rules', () => {
     expect(classify({ code: 'RATE_LIMIT', message: '429 You reached your daily limit' }, DEFAULT_RULES).category).toBe('quota');
   });
 
+  it.each([
+    'limit 200 requests per day',
+    'You have used 300 of 300 daily requests',
+  ])('a number in the text that is no leading status does not count (P3): RATE_LIMIT + "%s" → quota', (message) => {
+    expect(classify({ code: 'RATE_LIMIT', message }, DEFAULT_RULES).category).toBe('quota');
+  });
+
+  it.each([
+    ['429: daily limit reached', 'quota'],
+    ['status 429, daily limit', 'quota'],
+    ['HTTP 429 per day quota', 'quota'],
+  ])('reads a leading status pattern: "%s" → %s', (message, category) => {
+    expect(classify({ code: 'UNKNOWN', message }, DEFAULT_RULES).category).toBe(category);
+  });
+
   it('reports which rule matched', () => {
     const result = classify(rateLimit('daily limit'), DEFAULT_RULES);
     expect(result.rule).toBe(DEFAULT_RULES[0]);

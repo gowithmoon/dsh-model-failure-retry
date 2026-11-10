@@ -43,18 +43,23 @@ export function defaultRules() {
   return DEFAULT_RULES.map((rule) => ({ ...rule }));
 }
 
+const STATUS_IN_TEXT = /^\s*([45]\d\d)\b(?![.,]\d)|\b(?:status(?:\s*code)?|HTTP(?:\/[\d.]+)?)[\s:=]*([45]\d\d)\b/i;
+
 /**
  * The status a rule's `status` is compared with. Adapters such as dsh-llm-pi-ai
- * report no status, only text; then the first HTTP-status-looking number in
- * the message counts, and a bare RATE_LIMIT counts as 429.
+ * report no status, only text; then RATE_LIMIT counts as 429, and otherwise
+ * only a 4xx/5xx status in a status-shaped spot of the message counts: a
+ * leading "NNN" ("429: …", "429 Too Many…") or "status NNN" / "HTTP NNN".
+ * Any other number ("limit 200 requests per day") is no status.
  * @param {{ code?: string, message?: string, status?: number }} failure
  */
 export function failureStatus(failure) {
   if (Number.isInteger(failure.status)) return failure.status;
-  const fromText = /\b([1-5]\d\d)\b/.exec(failure.message ?? '');
-  if (fromText) return Number(fromText[1]);
-  return failure.code === 'RATE_LIMIT' ? 429 : undefined;
+  if (failure.code === 'RATE_LIMIT') return 429;
+  const fromText = STATUS_IN_TEXT.exec(failure.message ?? '');
+  return fromText ? Number(fromText[1] ?? fromText[2]) : undefined;
 }
+
 
 /**
  * The first rule (in order) that matches, or undefined.
