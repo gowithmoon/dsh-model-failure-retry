@@ -16,9 +16,11 @@
  * @property {Record<'rate-limit' | 'transient', { enabled: boolean }>} categories
  * @property {Partial<import('./types.js').RetryPolicy>} [policy]
  * @property {import('./types.js').PolicyOverride[]} [overrides]
+ * @property {import('./rules.js').ClassificationRule[]} [rules]  (#5) ordered; first hit wins
  */
 
 import { DEFAULT_POLICY } from './policy.js';
+import { defaultRules } from './rules.js';
 
 /** @returns {CoreConfig} a fresh, mutable default config. */
 export function defaultConfig() {
@@ -30,5 +32,6 @@ export function defaultConfig() {
     },
     policy: { ...DEFAULT_POLICY },
     overrides: [],
+    rules: defaultRules(),
   };
 }

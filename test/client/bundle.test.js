@@ -52,4 +52,13 @@ describe('client bundle', () => {
     expect(options).toMatchObject({ name: 'settings.section', id: 'model-failure-retry' });
     expect(options.label()).toBe('Model failure retry');
   });
+
+  it('hands the section a classification-rules controller', () => {
+    const { exports } = loadBundle();
+    const host = fakeClientCtx();
+    exports.apply(host.ctx);
+    host.serve();
+    const { rulesController } = host.registered[0].options.inject();
+    expect(rulesController.test({ status: '429', message: 'daily limit' })).toMatchObject({ category: 'quota', ruleIndex: 0 });
+  });
 });

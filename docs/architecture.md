@@ -13,7 +13,8 @@ src/entry.js             ENTRY_ID = 'model-failure-retry'；它既是 patch 条�
 src/core/                决策核心：纯逻辑，不依赖 DSH，一个文件管一件事
   types.js               JSDoc 类型：Category、ModelRef、RetryPolicy、RequestState、Decision
   categories.js          失败类别常量
-  classify.js            classify(failure, rules) → { category, rule? }
+  classify.js            classify(failure, rules) → { category, reason?, rule?, ruleIndex? }
+  rules.js               分类规则：DEFAULT_RULES / defaultRules()、firstMatchingRule、ruleError、failureStatus
   policy.js              DEFAULT_POLICY、resolvePolicy(target, config)
   schedule.js            retrySchedule(policy)（展示用）、nextDelay(policy, attempt, {retryAfterMs, random})（运行时用）
   config.js              CoreConfig 形状 + defaultConfig()
@@ -26,7 +27,9 @@ src/host/                DSH 适配层
 src/client/              Web 客户端（esbuild 打包，react / jsx-runtime / ui-primitives 用宿主提供的）
   index.jsx              apply：注册 locale，在 whileServed([ENTRY_ID]) 期间注册 settings.section
   section-controller.js  把 ConfigForm 投影成视图状态，写入走 form.mutate([{op:'set', path, value}])
-  Section.jsx            总开关 + 限流 / 临时故障开关
+  Section.jsx            总开关 + 限流 / 临时故障开关；下挂各票子小节
+  rules-controller.js    分类规则（#5）：整表写 ['rules']，test() 给测试框
+  RulesSection.jsx       分类规则列表 + 测试框
   locales.js             zh / en 文案，两边的 key 必须一致（有测试检查）
 test/core/               接缝 1：决策核心
 test/host/               接缝 2：假宿主（test/support/fake-host.js，用的是真实的 Cordis Context）
@@ -43,14 +46,15 @@ test/fixtures/smoke/     实机冒烟：run.sh 起 mock LLM，再跑 headless ds
 3. `decide(...)` 返回一个 Decision。
 4. 按 Decision 执行：`pass` 调用 `next()`；`retry` 先等待，再返回 `{kind:'retry'}`，不调用 `next()`；`give-up` 返回 `undefined`，本轮以 LlmError 结束，也不调用 `next()`。
 
-只有 `pass` 会调用 `next()`，所以插件接管的类别不会再被内置 llm-retry 重试一遍（ADR 0001）。另外，CONTEXT_WINDOW_EXCEEDED、IMAGE_OFFLOAD_REQUIRED、EMPTY_RESPONSE 这些错误码不属于任何类别，会落到 `pass`，压缩插件和内置重试照常处理它们。
+只有 `pass` 会调用 `next()`，所以插件接管的类别不会再被内置 llm-retry 重试一遍（ADR 0001）。另外，上下文超限（见 #5）、IMAGE_OFFLOAD_REQUIRED、EMPTY_RESPONSE 这些错误码不属于任何类别，会落到 `pass`，压缩插件和内置重试照常处理它们。
 
 ## 给后续票的扩展点
 
 规则是新增文件、新增配置的兄弟键，不改已有键的形状。
 
 - #4 策略、覆盖、时间轴：`policy.js` 的 `resolvePolicy(target, config)` 已经接收目标模型，覆盖规则放在 `config.overrides`。新的延迟算法加在 `schedule.js` 的 `baseDelay` 里，按 `policy.kind` 分支。时间轴直接用 `retrySchedule(policy)`，它返回每次等待的 `delayMs/minMs/maxMs`。
-- #5 分类规则：`classify(failure, rules)` 已经留好了 `rules` 参数，`decide` 传入的是 `config.rules`。规则先于错误码映射求值，命中时返回 `rule`。
+- #5 分类规则（已实现）：规则 `{status, code, pattern, regex, category}`，`status` 0 / 空串表示任意；`category` 可以是四个类别之一或 `context-window`。按顺序取第一条命中，都不命中才按错误码。配置 `rules` 是一个 volatile 数组，默认值就是 `DEFAULT_RULES`，用户列表整体替换默认（"恢复默认"写回 `defaultRules()`）。非法正则运行时永不命中。无 `failure.status` 时（pi-ai）从错误信息里取第一个三位状态码，裸 RATE_LIMIT 视为 429。
+  - 上下文超限：`classify` 返回 `{category:'fatal', reason:'context-window'}`（CONTEXT_WINDOW_EXCEEDED 码或 `context-window` 规则）。`decide` 对当前模型返回 `pass`，好让后面的压缩插件处理；#6 在候选模型上见到这个 reason 应返回 `skip`。
 - #6 切换链：在 `decide.js` 里，`quota`/`fatal` 目前直接返回 `give-up`，以后改为查链，返回 `fallback`/`skip`。链逻辑放新文件 `src/core/chains.js`（`matchChain`、`candidateOrder`）。`request-state.js` 的每 agent 记录里再加原模型、所用链、已试候选。适配层的 `switch` 加一个 `fallback` 分支，按 ADR 0002 先 `select`、结束本轮，再 `followup`。
 - #7 状态投影：在适配层 `retry` 分支的等待前后发出状态，用 session projection，不新增 session 事件类型。
 - #8 统计：在适配层的每个分支记录一次结果，建议新建 `src/host/stats.js`，不要写进决策核心。

@@ -20,8 +20,12 @@ import { nextDelay } from './schedule.js';
 
 export function decide(failure, requestState, config, { random } = {}) {
   if (!config.enabled) return PASS;
-  const { category } = classify(failure, config.rules);
+  const { category, reason } = classify(failure, config.rules);
   if (category === undefined) return PASS;
+  // Context overflow is terminal for the plugin but must still reach the
+  // compaction plugin, which listens after us; so the current model passes it on.
+  // (#6: a fallback candidate hitting this reason is skipped instead.)
+  if (reason === 'context-window') return PASS;
   if (category === 'quota' || category === 'fatal') return { kind: 'give-up', reason: category };
   if (!config.categories[category]?.enabled) return PASS;
 

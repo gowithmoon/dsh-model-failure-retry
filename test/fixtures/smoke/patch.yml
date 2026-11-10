@@ -12,6 +12,7 @@
           - { id: fail, name: fail }
           - { id: rl2, name: rl2 }
           - { id: ok, name: ok }
+          - { id: daily, name: daily }
 - id: agent-default-model
   name: '@deepseek-ai/dsh-agent-default-model'
   config: { provider: mock, model: !!js 'process.env.SMOKE_MODEL ?? "rl2"' }

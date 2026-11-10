@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Live smoke against headless DSH + mock LLM. Usage: run.sh [model] [enabled]
 #   run.sh rl2        → 429s retried by the plugin (first wait ≈5s), then success
+#   run.sh daily      → 429 "daily limit": quota by the default rules, 1 request, no retry (#5)
 #   run.sh fail       → 1 request + 5 retries, then the turn ends with RATE_LIMIT
 # Note: dsh-llm-pi-ai does not map Retry-After into providerRetryAfterMs (0.2.2-rc.1).
 #   run.sh rl2 false  → plugin off: DSH's own behaviour

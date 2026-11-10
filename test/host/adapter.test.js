@@ -190,3 +190,34 @@ describe('package wiring', () => {
     expect(patch).toContain(`id: ${ENTRY_ID}`);
   });
 });
+
+describe('classification rules in the adapter', () => {
+  it('fails a 429 "daily limit" at once, without retrying or handing it on', async () => {
+    await mount();
+    const agent = host.createAgent();
+    await expect(host.requestError(agent, { code: 'RATE_LIMIT', status: 429, message: 'You have hit your daily limit' })).resolves.toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+    expect(host.builtinRetry.calls).toEqual([]);
+  });
+
+  it('still retries a plain 429', async () => {
+    await mount();
+    const agent = host.createAgent();
+    await expect(settle(host.requestError(agent, { code: 'RATE_LIMIT', status: 429, message: 'Too Many Requests' }))).resolves.toEqual({ kind: 'retry' });
+  });
+
+  it('uses the rules from config, and an invalid regex rule is ignored', async () => {
+    await mount({ rules: [{ pattern: '(oops', regex: true, category: 'quota' }, { status: 429, pattern: 'slow down', category: 'quota' }] });
+    const agent = host.createAgent();
+    await expect(host.requestError(agent, { code: 'RATE_LIMIT', status: 429, message: 'please slow down' })).resolves.toBeUndefined();
+    // the user list replaced the defaults, so "daily" is a rate limit here
+    await expect(settle(host.requestError(agent, { code: 'RATE_LIMIT', status: 429, message: 'daily (oops' }, { step: 2 }))).resolves.toEqual({ kind: 'retry' });
+  });
+
+  it('hands a context-window overflow found by a rule to the next listener (compaction)', async () => {
+    await mount();
+    const agent = host.createAgent();
+    await host.requestError(agent, { code: 'INVALID_REQUEST', status: 400, message: 'maximum context length is 8192 tokens' });
+    expect(host.builtinRetry.calls).toEqual(['INVALID_REQUEST']);
+  });
+});
