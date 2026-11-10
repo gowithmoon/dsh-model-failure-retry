@@ -1,0 +1,6 @@
+# Applied when the package is installed (package.json dsh.bundle.patch).
+# The entry id is also the settings namespace the web client edits
+# (src/entry.js ENTRY_ID).
+- insert:
+    - id: model-failure-retry
+      name: 'dsh-model-failure-retry'

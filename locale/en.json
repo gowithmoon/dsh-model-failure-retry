@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Model failure retry",
+    "description": "Retry or switch models when a model request fails on rate limits, transient failures or exhausted quota."
+  }
+}

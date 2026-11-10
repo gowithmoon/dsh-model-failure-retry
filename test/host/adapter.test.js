@@ -138,3 +138,15 @@ describe('agent/request-error adapter', () => {
     expect(host.builtinRetry.calls).toEqual(['RATE_LIMIT']);
   });
 });
+
+describe('package wiring', () => {
+  it('exposes the Host plugin from the package root under the patch entry', async () => {
+    const root = await import('../../index.js');
+    expect(root.name).toBe('dsh-model-failure-retry');
+    expect(typeof root.apply).toBe('function');
+    const { readFileSync } = await import('node:fs');
+    const patch = readFileSync(new URL('../../cordis.patch.yml', import.meta.url), 'utf8');
+    const { ENTRY_ID } = await import('../../src/entry.js');
+    expect(patch).toContain(`id: ${ENTRY_ID}`);
+  });
+});
