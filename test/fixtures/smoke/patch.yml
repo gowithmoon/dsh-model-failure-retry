@@ -1,0 +1,22 @@
+# Live smoke: dsh --profile headless --patch test/fixtures/smoke/patch.yml (see run.sh)
+- id: llm-pi-ai
+  name: '@deepseek-ai/dsh-llm-pi-ai'
+  config:
+    providers:
+      mock:
+        displayName: Mock
+        apiKeyEnv: MOCK_API_KEY
+        api: openai-completions
+        baseURL: !!js '"http://127.0.0.1:" + (process.env.MOCK_PORT ?? "3999") + "/v1"'
+        models:
+          - { id: fail, name: fail }
+          - { id: rl2, name: rl2 }
+          - { id: ok, name: ok }
+- id: agent-default-model
+  name: '@deepseek-ai/dsh-agent-default-model'
+  config: { provider: mock, model: !!js 'process.env.SMOKE_MODEL ?? "rl2"' }
+- insert:
+    - id: model-failure-retry
+      name: 'file://@PLUGIN@'  # run.sh substitutes the absolute path (name must be a literal string)
+      config:
+        enabled: !!js 'process.env.SMOKE_ENABLED !== "false"'
