@@ -145,4 +145,24 @@ describe('fallback along a chain (fake host)', () => {
     expect(agent.selections).toEqual([]);
     expect(agent.followups).toEqual([]);
   });
+
+  it('publishes every decision with the fallback state for other modules (#7/#8/#9)', async () => {
+    host.provideLlm({ mock: { a: {}, c: {} } });
+    await mount({ chains: [{ match: 'mock/a', candidates: ['b', 'c'].map((model) => ({ provider: 'mock', model })) }] });
+    const events = [];
+    host.ctx.on(plugin.DECISION_EVENT, (e) => events.push(e));
+    host.ctx.on(plugin.DECISION_EVENT, () => { throw new Error('a broken observer'); });
+    const agent = host.createAgent({ provider: 'mock', model: 'a' });
+    await turn(agent, [QUOTA]);
+    await turn(agent, [QUOTA], { turn: 2 });
+    const a = { provider: 'mock', model: 'a' };
+    expect(events.map((e) => [e.model.model, e.decision.kind, e.decision.reason])).toEqual([
+      ['a', 'skip', 'missing-model'],
+      ['a', 'fallback', 'quota'],
+      ['c', 'give-up', 'chain-exhausted'],
+    ]);
+    expect(events[1]).toMatchObject({ agent, origin: a, decision: { to: { model: 'c' }, selection: { provider: 'mock', model: 'c' } } });
+    expect(events[2].origin).toEqual(a);
+    expect(agent.model.current()).toEqual(a);
+  });
 });
