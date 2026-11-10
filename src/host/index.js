@@ -15,7 +15,7 @@
 import { randomUUID } from 'node:crypto';
 import { label, matchChain, sameModel, toRef } from '../core/chain.js';
 import { classify } from '../core/classify.js';
-import { decide } from '../core/decide.js';
+import { decide, leavesModel } from '../core/decide.js';
 import { createFallbackStates } from './fallback-state.js';
 import { createRequestStates } from './request-state.js';
 import { installSwitchBack } from './switch-back.js';
@@ -89,6 +89,10 @@ export function apply(ctx, config) {
     active: () => !lifetime.signal.aborted && config.enabled.get(),
   });
 
+  function logGiveUp(decision, failure, model) {
+    ctx.logger?.info?.(`give up (${decision.reason}) after ${failure.code} on ${label(model)}`);
+  }
+
   /** Model info for each candidate of the chain `start` matches: Map key → info | null (missing). */
   async function candidateInfos(start, chains) {
     const llm = ctx.get('llm');
@@ -149,7 +153,7 @@ export function apply(ctx, config) {
         return { kind: 'retry' };
       }
       default:
-        ctx.logger?.info?.(`give up (${decision.reason}) after ${failure.code} on ${label(model)}`);
+        logGiveUp(decision, failure, model);
         return undefined;
     }
   }, { prepend: true });
@@ -190,7 +194,7 @@ export function apply(ctx, config) {
 
     // give-up: chain exhausted (or no chain). Back to the origin, if we ever left it.
     const origin = fb.origin;
-    ctx.logger?.info?.(`give up (${decision.reason}) after ${failure.code} on ${label(model)}`);
+    logGiveUp(decision, failure, model);
     publish(agent, { model, failure, decision });
     fallbacks.clear(agent);
     if (origin && !sameModel(origin, model)) agent.model.select(origin);
@@ -237,10 +241,4 @@ export function apply(ctx, config) {
       source: { kind: FALLBACK_SOURCE_KIND, form: 'notice', summary: pending.summary, from: pending.from, to: pending.to },
     }));
   });
-}
-
-/** Whether a decision moves off the current model (needs candidate lookup). */
-function leavesModel(decision) {
-  return decision.kind === 'fallback' || decision.kind === 'skip'
-    || (decision.kind === 'give-up' && decision.reason === 'chain-exhausted');
 }

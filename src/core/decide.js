@@ -68,5 +68,16 @@ function nextCandidate(reason, { model, episode }, config, isAvailable) {
   return walk(0);
 }
 
+/**
+ * Whether a decision moves off the current model: a fallback, a skip, or the
+ * chain running out (back to the origin). The host looks up which candidates
+ * still exist before acting on such a decision.
+ * @param {import('./types.js').Decision} decision
+ */
+export function leavesModel(decision) {
+  return decision.kind === 'fallback' || decision.kind === 'skip'
+    || (decision.kind === 'give-up' && decision.reason === 'chain-exhausted');
+}
+
 /** @type {import('./types.js').Decision} */
 const PASS = Object.freeze({ kind: 'pass' });

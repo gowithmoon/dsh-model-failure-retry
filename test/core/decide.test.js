@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decide } from '../../src/core/decide.js';
+import { decide, leavesModel } from '../../src/core/decide.js';
 import { defaultConfig } from '../../src/core/config.js';
 
 const failure = (code, extra = {}) => ({ message: code, code, ...extra });
@@ -170,5 +170,16 @@ describe('decide with fallback chains', () => {
   it('does not switch when the plugin is off', () => {
     const config = withChains([{ match: '*/*', candidates: [B] }], { enabled: false });
     expect(decide(failure('QUOTA'), on(A), config, opts)).toEqual({ kind: 'pass' });
+  });
+});
+
+describe('leavesModel (S8)', () => {
+  it('is true for fallback, skip and a chain that ran out, false otherwise', () => {
+    expect(leavesModel({ kind: 'fallback' })).toBe(true);
+    expect(leavesModel({ kind: 'skip' })).toBe(true);
+    expect(leavesModel({ kind: 'give-up', reason: 'chain-exhausted' })).toBe(true);
+    expect(leavesModel({ kind: 'give-up', reason: 'fatal' })).toBe(false);
+    expect(leavesModel({ kind: 'retry' })).toBe(false);
+    expect(leavesModel({ kind: 'pass' })).toBe(false);
   });
 });
