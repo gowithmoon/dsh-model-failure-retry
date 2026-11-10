@@ -17,6 +17,7 @@
  * @property {Partial<import('./types.js').RetryPolicy>} [policy]
  * @property {import('./types.js').PolicyOverride[]} [overrides]
  * @property {import('./rules.js').ClassificationRule[]} [rules]  (#5) ordered; first hit wins
+ * @property {import('./chain.js').FallbackChain[]} [chains]  (#6) ordered; first match wins
  */
 
 import { DEFAULT_POLICY } from './policy.js';
@@ -33,5 +34,6 @@ export function defaultConfig() {
     policy: { ...DEFAULT_POLICY },
     overrides: [],
     rules: defaultRules(),
+    chains: [],
   };
 }

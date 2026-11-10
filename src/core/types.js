@@ -21,6 +21,12 @@
  *
  * @typedef {object} RequestState
  * @property {number} attempts       Retries already performed for this request on the current model.
+ * @property {ModelRef} [model]      The model the failed request ran on.
+ * @property {FallbackEpisode} [episode]  Set once this turn has switched at least once.
+ *
+ * @typedef {object} FallbackEpisode  One run along a fallback chain (#6).
+ * @property {ModelRef} start        Model the episode started from; picks the chain and the cyclic order.
+ * @property {ModelRef[]} tried      Models already tried in this episode (start included).
  *
  * @typedef {(
  *   | { kind: 'retry', delayMs: number, attempt: number, maxAttempts: number }
