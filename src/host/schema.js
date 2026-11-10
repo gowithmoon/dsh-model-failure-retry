@@ -11,6 +11,7 @@
  */
 import z from '@deepseek-ai/schemastery';
 import { DEFAULT_POLICY } from '../core/policy.js';
+import { defaultRules, RULE_TARGETS } from '../core/rules.js';
 
 const toggle = (value) => z.boolean().default(value).volatile();
 
@@ -26,6 +27,15 @@ export const Policy = z.object({
   honorRetryAfter: toggle(DEFAULT_POLICY.honorRetryAfter),
 });
 
+/** One classification rule (src/core/rules.js). Status 0 / empty strings mean "any". */
+export const Rule = z.object({
+  status: z.natural().default(0),
+  code: z.string().default(''),
+  pattern: z.string().default(''),
+  regex: z.boolean().default(false),
+  category: z.union(RULE_TARGETS).required(),
+});
+
 export const Config = z.object({
   enabled: toggle(true),
   categories: z.object({
@@ -33,6 +43,7 @@ export const Config = z.object({
     transient: Category,
   }),
   policy: Policy,
+  rules: z.array(Rule).default(defaultRules()).volatile(),
 });
 
 /**
@@ -48,5 +59,6 @@ export function snapshotConfig(config) {
       transient: read(config.categories.transient),
     },
     policy: read(config.policy),
+    rules: config.rules.get(),
   };
 }
