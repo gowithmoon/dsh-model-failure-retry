@@ -18,6 +18,7 @@ function fakeClientCtx() {
   let served;
   const ctx = {
     effect: (fn) => effects.push(fn()),
+    inject: () => {},
     locale: { register: (ns, dicts) => { locales[ns] = dicts; return () => {}; }, bind: (ns) => (key) => locales[ns]?.en?.[key] ?? key },
     configForms: {
       get: () => ({ getSnapshot: () => ({ status: 'loading' }), subscribe: () => () => {}, mutate: async () => true }),
@@ -60,5 +61,14 @@ describe('client bundle', () => {
     host.serve();
     const { rulesController } = host.registered[0].options.inject();
     expect(rulesController.test({ status: '429', message: 'daily limit' })).toMatchObject({ category: 'quota', ruleIndex: 0 });
+  });
+
+  it('hands the section a fallback-chains controller', () => {
+    const { exports } = loadBundle();
+    const host = fakeClientCtx();
+    exports.apply(host.ctx);
+    host.serve();
+    const { chainsController } = host.registered[0].options.inject();
+    expect(chainsController.getSnapshot()).toMatchObject({ chains: [], catalog: { status: 'unavailable' } });
   });
 });
