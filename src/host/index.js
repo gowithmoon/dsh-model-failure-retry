@@ -21,6 +21,7 @@ import { createRequestStates } from './request-state.js';
 import { installSwitchBack } from './switch-back.js';
 import { FALLBACK_SOURCE_KIND, installStatusProjection, recordRetry, recordRetryStarted } from './status-projection.js';
 import { installStats } from './stats.js';
+import { installSessionStore } from './session-store.js';
 import { Config, snapshotConfig } from './schema.js';
 import { wait } from './wait.js';
 
@@ -48,7 +49,8 @@ export function apply(ctx, config) {
   ctx.effect(() => () => lifetime.abort(new Error('model-failure-retry disposed')), 'model-failure-retry: lifetime');
 
   const requests = createRequestStates();
-  const fallbacks = createFallbackStates();
+  const sessions = installSessionStore(ctx);
+  const fallbacks = createFallbackStates({ persist: sessions });
 
   /** Publish one decision to observers (#7/#8/#9). Never lets an observer break recovery. */
   function publish(agent, payload) {
@@ -83,6 +85,7 @@ export function apply(ctx, config) {
 
   installSwitchBack(ctx, {
     fallbacks,
+    persist: sessions,
     publish,
     decisionEvent: DECISION_EVENT,
     settings: () => snapshotConfig(config).switchBack,

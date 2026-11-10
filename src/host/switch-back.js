@@ -26,6 +26,7 @@ import { FALLBACK_SOURCE_KIND } from './status-projection.js';
 /**
  * @param {import('@deepseek-ai/cordis').Context} ctx
  * @param {{
+ *   persist?: import('./fallback-state.js').FallbackPersistence & { load(agent: object): { lastFailureAt?: number } | undefined },
  *   fallbacks: ReturnType<typeof import('./fallback-state.js').createFallbackStates>,
  *   publish: (agent: object, payload: object) => void,
  *   settings: () => import('../core/switch-back.js').SwitchBackSettings | undefined,
@@ -33,9 +34,21 @@ import { FALLBACK_SOURCE_KIND } from './status-projection.js';
  *   active: () => boolean,
  * }} deps
  */
-export function installSwitchBack(ctx, { fallbacks, publish, settings, decisionEvent, active }) {
-  /** @type {WeakMap<object, number>} when each agent's origin last failed */
-  const lastFailureAt = new WeakMap();
+export function installSwitchBack(ctx, { fallbacks, persist, publish, settings, decisionEvent, active }) {
+  /** @type {WeakMap<object, number | undefined>} when each agent's origin last failed (P2: also persisted) */
+  const failures = new WeakMap();
+  const lastFailureAt = {
+    get: (agent) => (failures.has(agent) ? failures.get(agent) : persist?.load(agent)?.lastFailureAt),
+    set(agent, time) {
+      failures.set(agent, time);
+      persist?.save(agent, { lastFailureAt: time });
+    },
+    delete(agent) {
+      const had = lastFailureAt.get(agent) !== undefined;
+      failures.set(agent, undefined);
+      if (had) persist?.save(agent, { lastFailureAt: undefined });
+    },
+  };
   /** @type {WeakMap<object, number>} the last turn whose first claim we saw */
   const seenTurn = new WeakMap();
 
