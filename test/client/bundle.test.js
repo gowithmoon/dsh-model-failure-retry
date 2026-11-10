@@ -100,6 +100,50 @@ describe('client bundle', () => {
     expect(statsController.getSnapshot()).toMatchObject({ status: 'ready', result: { summary: { retries: 2 } } });
   });
 
+  it('unmounts the stats Remote even when the scope went away before the mount finished (S10)', async () => {
+    const { exports } = loadBundle();
+    const host = fakeClientCtx();
+    const injections = [];
+    host.ctx.inject = (keys, fn) => injections.push({ keys, fn });
+    exports.apply(host.ctx);
+    let finishMount;
+    const unmounted = [];
+    const disposers = [];
+    let active = true;
+    const sub = {
+      // like a Cordis fiber: effects are refused once the scope is gone
+      effect: (fn) => { if (!active) throw new Error('INACTIVE_EFFECT'); disposers.push(fn()); },
+      remote: { $mount: () => new Promise((resolve) => { finishMount = resolve; }) },
+      inject: () => {},
+      logger: { warn: () => {} },
+    };
+    const run = injections.find((i) => i.keys.length === 1 && i.keys[0] === 'remote').fn(sub);
+    disposers.splice(0).forEach((d) => d?.()); // the remote service goes away
+    active = false;
+    finishMount(() => unmounted.push('stats'));
+    await run;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(unmounted).toEqual(['stats']);
+  });
+
+  it('a failed stats Remote mount is reported, not left as an unhandled rejection (S10)', async () => {
+    const { exports } = loadBundle();
+    const host = fakeClientCtx();
+    const injections = [];
+    host.ctx.inject = (keys, fn) => injections.push({ keys, fn });
+    exports.apply(host.ctx);
+    const warned = [];
+    const sub = {
+      effect: (fn) => fn(),
+      remote: { $mount: async () => { throw new Error('no gateway'); } },
+      inject: () => {},
+      logger: { warn: (m) => warned.push(String(m)) },
+    };
+    await injections.find((i) => i.keys.length === 1 && i.keys[0] === 'remote').fn(sub);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(warned.join()).toContain('no gateway');
+  });
+
   it('docks the status line above the composer of each session, and stops through the conversation service', async () => {
     const { exports } = loadBundle();
     const host = fakeClientCtx();

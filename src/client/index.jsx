@@ -38,8 +38,21 @@ export function apply(ctx) {
   });
   // Stats (#8): mount the Host stats Remote; without it the stats part shows "unavailable".
   ctx.inject(['remote'], async (sub) => {
-    const unmount = await sub.remote.$mount(STATS_CONTRIBUTION);
-    sub.effect(() => () => unmount(), 'model-failure-retry: stats remote');
+    // Register the teardown before awaiting, so a scope disposed while
+    // $mount is in flight still unmounts once the mount lands (S10).
+    let disposed = false;
+    let unmount;
+    sub.effect(() => () => { disposed = true; unmount?.(); }, 'model-failure-retry: stats remote');
+    try {
+      unmount = await sub.remote.$mount(STATS_CONTRIBUTION);
+    } catch (error) {
+      sub.logger?.warn?.(`stats remote mount failed: ${error}`);
+      return;
+    }
+    if (disposed) {
+      unmount();
+      return;
+    }
     sub.inject([`remote.${STATS_SERVICE}`], (inner) => {
       statsController.setLoader(async (query) => {
         const r = await inner.remote[STATS_SERVICE].query(query);
