@@ -88,6 +88,18 @@ test/fixtures/smoke/     实机冒烟：run.sh 起 mock LLM，再跑 headless ds
 - 配置：在 `src/host/schema.js` 的 `Config` 里加兄弟键，并在 `snapshotConfig` 里读出来。volatile 只能放在固定的对象路径上，而且不能嵌套，所以列表（规则、链、覆盖）整个作为一个 volatile 数组字段。
 - 设置页：每张票写自己的 controller 和组件，挂在 `Section.jsx` 里，顺序是 重试策略 → 时间轴 → 切换链 → 分类规则 → 回切 → 统计。写配置只写自己负责的路径。
 
+## 与规格的偏差
+
+以下几处有意和规格（议题 #1）写法不同，代码不改：
+
+- P4 上下文超限：在原模型上返回 `pass`，在候选模型上 `skip`。原模型上交给后面监听的 dsh-compaction-basic 压缩后重试；切到候选模型往往是更小的窗口，压缩没意义，直接走下一个候选。
+- P5 回切挂点：用每轮第一条 `agent/inbox/claimed`，不用 `agent/pre-step`。`pre-step` 拿到的本步模型已经定了，那里 `select()` 只影响下一步（工具循环中途），违背“只在新一轮开始时回切”。
+- P7 匹配规则：不带 `/` 的模式等同 `*/<模式>`，即提供方默认任意。这是维护者的决定，省得每条规则都写提供方。
+- P8 默认额度关键词：比规格列举的多几条，覆盖实际见到的提供方报错写法；用户可在分类规则里改。
+- P9 运行时延迟：`nextDelay` 与 `retrySchedule`（时间轴预览）共用同一个 `baseDelay` 计算，保证时间轴和实际等待按同一公式算（实际等待再加抖动，或按提供方的 Retry-After）。
+- P10 模型下拉：取自 `remote.session.modelCatalog()`。它本身由 `llm.listProviders` / `listModels` 构建，界面侧没有别的可用入口。
+- P11 统计按种类筛选：规格没要求，加上是因为记录种类多（重试、切换、跳过、放弃、回切），不筛很难看。
+
 ## 已知事实
 
 - 重试计数的 key 是 `turn:step:provider/model`。DSH 重试时会重跑同一个 step；换了 step 或换了模型，计数从 0 开始。子代理是另一个 agent，有自己的计数。
