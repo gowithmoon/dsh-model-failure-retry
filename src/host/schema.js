@@ -51,6 +51,17 @@ export const Rule = z.object({
   category: z.union(RULE_TARGETS).required(),
 });
 
+const ModelRef = z.object({
+  provider: z.string().required(),
+  model: z.string().required(),
+});
+
+/** One fallback chain (src/core/chain.js): a match rule and ordered candidates. */
+export const Chain = z.object({
+  match: z.string().default('*/*'),
+  candidates: z.array(ModelRef).default([]),
+});
+
 export const Config = z.object({
   enabled: toggle(true),
   categories: z.object({
@@ -60,6 +71,7 @@ export const Config = z.object({
   policy: Policy,
   overrides: z.array(Override).default([]).volatile(),
   rules: z.array(Rule).default(defaultRules()).volatile(),
+  chains: z.array(Chain).default([]).volatile(),
 });
 
 /**
@@ -77,5 +89,6 @@ export function snapshotConfig(config) {
     policy: read(config.policy),
     overrides: config.overrides.get(),
     rules: config.rules.get(),
+    chains: config.chains.get(),
   };
 }

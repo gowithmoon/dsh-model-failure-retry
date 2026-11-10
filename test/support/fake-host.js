@@ -20,16 +20,47 @@ export function createFakeHost() {
     },
   });
 
-  /** A minimal agent: its current model and a turn signal. */
-  function createAgent({ provider = 'mock', model = 'm1' } = {}) {
+  /**
+   * A minimal agent: its current model, a turn signal, and the follow-up
+   * messages it was given. `selections` records every `model.select` call.
+   */
+  function createAgent({ provider = 'mock', model = 'm1', reasoningEffort } = {}) {
     const controller = new AbortController();
-    let current = { provider, model };
-    return {
+    let current = reasoningEffort ? { provider, model, reasoningEffort } : { provider, model };
+    const agent = {
       session: {},
-      model: { current: () => current, select: (ref) => { current = ref; } },
+      selections: [],
+      followups: [],
+      model: {
+        current: () => current,
+        select: (ref) => { current = ref; agent.selections.push(ref); },
+      },
+      followup: (message) => { agent.followups.push(message); },
       controller,
       get signal() { return controller.signal; },
     };
+    return agent;
+  }
+
+  /** Emit `agent/status` the way dsh-agent does when a turn starts or ends. */
+  function status(agent, value) {
+    ctx.emit('agent/status', { agent, status: value });
+  }
+
+  /**
+   * Provide a stand-in `llm` service knowing `models`: { [provider]: { [model]: info } },
+   * where info may carry `reasoning: { efforts: [{ id }] }`.
+   */
+  function provideLlm(models) {
+    ctx.provide('llm', {
+      listProviders: () => Object.keys(models).map((id) => ({ id, name: id })),
+      listModels: async (provider) => Object.keys(models[provider] ?? {}).map((id) => ({ provider, id, name: id })),
+      resolveModelInfo: async (provider, model) => {
+        const info = models[provider]?.[model];
+        if (!info) throw new Error(`unknown model ${provider}/${model}`);
+        return { provider, id: model, name: model, ...info };
+      },
+    });
   }
 
   /**
@@ -49,5 +80,5 @@ export function createFakeHost() {
     }, () => Promise.resolve(undefined));
   }
 
-  return { ctx, builtinRetry, createAgent, requestError };
+  return { ctx, builtinRetry, createAgent, requestError, status, provideLlm };
 }
