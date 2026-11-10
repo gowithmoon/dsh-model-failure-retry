@@ -4,6 +4,7 @@ import { PolicySection } from './PolicySection.jsx';
 import { RulesSection } from './RulesSection.jsx';
 import { ChainsSection } from './ChainsSection.jsx';
 import { SwitchBackSection } from './SwitchBackSection.jsx';
+import { StatsSection } from './StatsSection.jsx';
 
 const row = { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, padding: '12px 0' };
 const hint = { opacity: 0.65, fontSize: 12, marginTop: 4 };
@@ -24,7 +25,7 @@ function ToggleRow({ id, label, hintText, checked, disabled, onChange }) {
  * The plugin's settings section. Sub-sections from later tickets go below the
  * switches in spec order: policy → timeline → chains → rules → switch-back → stats.
  */
-export function Section({ t, controller, policyController, rulesController, chainsController, switchBackController }) {
+export function Section({ t, controller, policyController, rulesController, chainsController, switchBackController, statsController }) {
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   const [failed, setFailed] = useState(false);
   const write = (promise) => {
@@ -68,6 +69,7 @@ export function Section({ t, controller, policyController, rulesController, chai
       {chainsController && <ChainsSection t={t} controller={chainsController} disabled={!state.enabled} />}
       {rulesController && <RulesSection t={t} controller={rulesController} />}
       {switchBackController && <SwitchBackSection t={t} controller={switchBackController} write={write} disabled={disabled || !state.enabled} />}
+      {statsController && <StatsSection t={t} controller={statsController} write={write} disabled={disabled} />}
     </div>
   );
 }

@@ -17,10 +17,10 @@
  */
 import { Service } from '@deepseek-ai/cordis';
 import { DEFAULT_RETENTION_DAYS, isExpired, queryStats, recordOf } from '../core/stats.js';
+import { STATS_PACKAGE, STATS_QUERY_DESCRIPTOR, STATS_SERVICE } from '../stats-remote.js';
 
-/** Cordis service key and Remote namespace of the stats query. */
-export const STATS_SERVICE = 'modelFailureRetryStats';
-const PACKAGE = 'dsh-model-failure-retry';
+export { STATS_SERVICE };
+
 const HOUR = 3_600_000;
 
 /** storageDomain spec (shape of dsh-storage-domain `defineDomain`; validation is ours). */
@@ -39,38 +39,11 @@ function parseRecord(raw) {
   return raw;
 }
 
-const codec = (symbol) => ({ mode: 'strict', typeSymbol: `${PACKAGE}#${symbol}`, create: () => ({ parse: (x) => x }) });
-const queryCodec = {
-  mode: 'strict',
-  typeSymbol: `${PACKAGE}#StatsQuery`,
-  create: () => ({ parse: (x) => (x === undefined ? {} : parseQuery(x)) }),
-};
-
-function parseQuery(x) {
-  if (!x || typeof x !== 'object' || Array.isArray(x)) throw new Error('stats query must be an object');
-  const out = {};
-  for (const k of ['sessionId', 'model', 'category', 'kind']) if (typeof x[k] === 'string' && x[k]) out[k] = x[k];
-  for (const k of ['from', 'to', 'tzOffsetMin', 'page', 'pageSize']) if (Number.isFinite(x[k])) out[k] = x[k];
-  if (x.bucket === 'hour' || x.bucket === 'day') out.bucket = x.bucket;
-  return out;
-}
-
-/** Remote descriptor of `query` (Host manifest and client mount share this shape). */
-export const QUERY_DESCRIPTOR = Object.freeze({
-  id: `${PACKAGE}#${STATS_SERVICE}/query`,
-  service: STATS_SERVICE,
-  namespace: STATS_SERVICE,
-  method: 'query',
-  invocation: { kind: 'direct' },
-  parameters: [{ name: 'query', wire: 'query', source: 'json', acceptsUndefined: true, codec: queryCodec }],
-  result: codec('StatsResult'),
-});
-
 const MANIFEST = {
-  package: PACKAGE,
+  package: STATS_PACKAGE,
   face: 'host',
   schemas: [],
-  invocations: [QUERY_DESCRIPTOR],
+  invocations: [STATS_QUERY_DESCRIPTOR],
   model: { services: [], events: [], objects: [] },
 };
 
