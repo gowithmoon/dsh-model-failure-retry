@@ -12,6 +12,7 @@
 import z from '@deepseek-ai/schemastery';
 import { DEFAULT_POLICY } from '../core/policy.js';
 import { defaultRules, RULE_TARGETS } from '../core/rules.js';
+import { DEFAULT_SWITCH_BACK } from '../core/switch-back.js';
 
 const toggle = (value) => z.boolean().default(value).volatile();
 
@@ -72,6 +73,11 @@ export const Config = z.object({
   overrides: z.array(Override).default([]).volatile(),
   rules: z.array(Rule).default(defaultRules()).volatile(),
   chains: z.array(Chain).default([]).volatile(),
+  /** (#9) switch back to the origin model at a new turn */
+  switchBack: z.object({
+    enabled: toggle(DEFAULT_SWITCH_BACK.enabled),
+    intervalMs: z.natural().default(DEFAULT_SWITCH_BACK.intervalMs).volatile(),
+  }),
 });
 
 /**
@@ -90,5 +96,6 @@ export function snapshotConfig(config) {
     overrides: config.overrides.get(),
     rules: config.rules.get(),
     chains: config.chains.get(),
+    switchBack: read(config.switchBack),
   };
 }

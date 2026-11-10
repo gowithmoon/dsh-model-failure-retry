@@ -17,6 +17,7 @@ import { matchChain, sameModel } from '../core/chain.js';
 import { decide } from '../core/decide.js';
 import { createFallbackStates } from './fallback-state.js';
 import { createRequestStates } from './request-state.js';
+import { installSwitchBack } from './switch-back.js';
 import { Config, snapshotConfig } from './schema.js';
 import { wait } from './wait.js';
 
@@ -56,6 +57,14 @@ export function apply(ctx, config) {
       ctx.logger?.warn?.(`decision observer failed: ${error}`);
     }
   }
+
+  installSwitchBack(ctx, {
+    fallbacks,
+    publish,
+    decisionEvent: DECISION_EVENT,
+    settings: () => snapshotConfig(config).switchBack,
+    active: () => !lifetime.signal.aborted && config.enabled.get(),
+  });
 
   /** Model info for each candidate of the chain `start` matches: Map key → info | null (missing). */
   async function candidateInfos(start, chains) {

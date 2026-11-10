@@ -18,10 +18,12 @@
  * @property {import('./types.js').PolicyOverride[]} [overrides]
  * @property {import('./rules.js').ClassificationRule[]} [rules]  (#5) ordered; first hit wins
  * @property {import('./chain.js').FallbackChain[]} [chains]  (#6) ordered; first match wins
+ * @property {import('./switch-back.js').SwitchBackSettings} [switchBack]  (#9)
  */
 
 import { DEFAULT_POLICY } from './policy.js';
 import { defaultRules } from './rules.js';
+import { DEFAULT_SWITCH_BACK } from './switch-back.js';
 
 /** @returns {CoreConfig} a fresh, mutable default config. */
 export function defaultConfig() {
@@ -35,5 +37,6 @@ export function defaultConfig() {
     overrides: [],
     rules: defaultRules(),
     chains: [],
+    switchBack: { ...DEFAULT_SWITCH_BACK },
   };
 }
