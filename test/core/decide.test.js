@@ -62,3 +62,20 @@ describe('decide', () => {
     expect(decide(failure('AUTH'), fresh, defaultConfig(), opts)).toEqual({ kind: 'give-up', reason: 'fatal' });
   });
 });
+
+describe('decide with classification rules', () => {
+  it('does not retry a 429 that the default rules classify as quota', () => {
+    expect(decide(failure('RATE_LIMIT', { status: 429, message: 'daily limit reached' }), fresh, defaultConfig(), opts))
+      .toEqual({ kind: 'give-up', reason: 'quota' });
+  });
+
+  it('applies user rules from config.rules', () => {
+    const config = { ...defaultConfig(), rules: [{ code: 'PI_AI_ERROR', pattern: 'overloaded', category: 'transient' }] };
+    expect(decide(failure('PI_AI_ERROR', { message: 'upstream overloaded' }), fresh, config, opts)).toMatchObject({ kind: 'retry' });
+  });
+
+  it('passes a context-window overflow found by a rule on to compaction', () => {
+    const f = failure('INVALID_REQUEST', { status: 400, message: 'maximum context length is 8192 tokens' });
+    expect(decide(f, fresh, defaultConfig(), opts)).toEqual({ kind: 'pass' });
+  });
+});

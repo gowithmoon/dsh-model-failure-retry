@@ -18,10 +18,14 @@ describe('classify by DSH error code', () => {
     expect(classify(failure(code)).category).toBe(category);
   });
 
-  it.each(['EMPTY_RESPONSE', 'CONTEXT_WINDOW_EXCEEDED', 'IMAGE_OFFLOAD_REQUIRED', 'ABORTED', 'PI_AI_ERROR', 'SOMETHING_NEW'])(
+  it.each(['EMPTY_RESPONSE', 'IMAGE_OFFLOAD_REQUIRED', 'ABORTED', 'PI_AI_ERROR', 'SOMETHING_NEW'])(
     '%s is not a category the plugin owns',
     (code) => {
       expect(classify(failure(code)).category).toBeUndefined();
     },
   );
+
+  it('CONTEXT_WINDOW_EXCEEDED is fatal with its own reason', () => {
+    expect(classify(failure('CONTEXT_WINDOW_EXCEEDED'))).toEqual({ category: 'fatal', reason: 'context-window' });
+  });
 });
