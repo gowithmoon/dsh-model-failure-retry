@@ -198,6 +198,24 @@ export function apply(ctx, config) {
     return undefined;
   }
 
+  /** session → agent, for `session/event` (which carries only the session). */
+  const agentOfSession = new WeakMap();
+  ctx.on('agent/status', ({ agent }) => {
+    if (agent?.session && typeof agent.session === 'object') agentOfSession.set(agent.session, agent);
+  }, { prepend: true });
+
+  // A user stop ends the fallback episode wherever it lands, also in the
+  // follow-up turn on the candidate (P1): select the origin back.
+  ctx.on('session/event', (session, event) => {
+    if (event?.type !== 'turn/end') return;
+    const reason = event.data?.reason;
+    if (reason?.kind !== 'aborted' || reason.reason?.kind !== 'user') return;
+    const agent = agentOfSession.get(session);
+    if (!agent || !fallbacks.get(agent).origin) return;
+    const current = agent.model?.current?.();
+    stopped(agent, { model: current ? { provider: current.provider, model: current.model } : fallbacks.get(agent).origin });
+  });
+
   ctx.on('agent/status', ({ agent, status }) => {
     if (status !== 'idle') return;
     const fb = fallbacks.get(agent);

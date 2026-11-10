@@ -173,6 +173,32 @@ describe('fallback along a chain (fake host)', () => {
     expect(agent.model.current()).toEqual({ provider: 'mock', model: 'a' });
   });
 
+  it('a user stop in the follow-up turn on the candidate selects the origin back (P1)', async () => {
+    await mount();
+    const events = [];
+    host.ctx.on(plugin.DECISION_EVENT, (e) => events.push(e.decision.kind));
+    const agent = host.createAgent({ provider: 'mock', model: 'a', reasoningEffort: 'high' });
+    await turn(agent, [QUOTA]);
+    expect(agent.model.current().model).toBe('b');
+    host.status(agent, 'running'); // the follow-up turn runs on b; the user stops it
+    host.ctx.emit('session/event', agent.session, { type: 'turn/end', seq: 9, time: Date.now(), data: { turn: 2, reason: { kind: 'aborted', reason: { kind: 'user' } } } });
+    host.status(agent, 'idle');
+    expect(agent.model.current()).toEqual({ provider: 'mock', model: 'a', reasoningEffort: 'high' });
+    expect(events.at(-1)).toBe('stopped');
+    expect(agent.followups).toHaveLength(1);
+  });
+
+  it('a turn that ends otherwise, or a stop with no switch, leaves the model alone', async () => {
+    await mount();
+    const agent = host.createAgent({ provider: 'mock', model: 'a' });
+    const stop = { type: 'turn/end', seq: 9, time: 0, data: { turn: 1, reason: { kind: 'aborted', reason: { kind: 'user' } } } };
+    host.ctx.emit('session/event', agent.session, stop);
+    expect(agent.selections).toEqual([]);
+    await turn(agent, [QUOTA]);
+    host.ctx.emit('session/event', agent.session, { ...stop, data: { turn: 2, reason: { kind: 'completed' } } });
+    expect(agent.model.current().model).toBe('b');
+  });
+
   it('publishes every decision with the fallback state for other modules (#7/#8/#9)', async () => {
     host.provideLlm({ mock: { a: {}, c: {} } });
     await mount({ chains: [{ match: 'mock/a', candidates: ['b', 'c'].map((model) => ({ provider: 'mock', model })) }] });
