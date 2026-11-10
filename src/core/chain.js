@@ -26,7 +26,7 @@ export function matchChain(model, chains) {
  * @returns {import('./types.js').ModelRef[]}
  */
 export function candidateOrder(candidates, current) {
-  const list = (candidates ?? []).map(({ provider, model }) => ({ provider, model }));
+  const list = (candidates ?? []).map(toRef);
   const at = list.findIndex((c) => sameModel(c, current));
   if (at < 0) return list;
   return [...list.slice(at + 1), ...list.slice(0, at)];
@@ -35,4 +35,14 @@ export function candidateOrder(candidates, current) {
 /** Same provider and model id (reasoning effort is ignored). */
 export function sameModel(a, b) {
   return !!a && !!b && a.provider === b.provider && a.model === b.model;
+}
+
+/** Just the provider and model id of a ref (drops reasoning effort and extra fields). */
+export function toRef(ref) {
+  return { provider: ref.provider, model: ref.model };
+}
+
+/** `provider/model`, the label used in logs, stats and the status line. */
+export function label(ref) {
+  return `${ref.provider}/${ref.model}`;
 }

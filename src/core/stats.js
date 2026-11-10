@@ -8,6 +8,7 @@
  * plugin was handling it) come from the turn end, see src/host/stats.js.
  * `pass` and `origin-reset` are not recorded.
  */
+import { label as refLabel } from './chain.js';
 import { classify } from './classify.js';
 import { defaultRules, failureStatus } from './rules.js';
 
@@ -19,7 +20,7 @@ const DAY = 86_400_000;
 const HOUR = 3_600_000;
 const MAX_BUCKETS = 400;
 
-const label = (ref) => (ref ? `${ref.provider}/${ref.model}` : undefined);
+const label = (ref) => (ref ? refLabel(ref) : undefined);
 
 /**
  * @typedef {object} StatsRecord
@@ -122,14 +123,14 @@ export function queryStats(records, query = {}) {
     pageSize,
     facets: {
       sessions: unique(all.map((r) => r.sessionId)),
-      models: unique(all.map((r) => `${r.provider}/${r.model}`)),
+      models: unique(all.map(refLabel)),
     },
   };
 }
 
 function matches(r, q) {
   if (q.sessionId && r.sessionId !== q.sessionId) return false;
-  if (q.model && `${r.provider}/${r.model}` !== q.model) return false;
+  if (q.model && refLabel(r) !== q.model) return false;
   if (q.category && r.category !== q.category) return false;
   if (q.kind && r.kind !== q.kind) return false;
   if (Number.isFinite(q.from) && r.time < q.from) return false;

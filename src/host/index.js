@@ -13,7 +13,7 @@
  * `DECISION_EVENT`) for the status line (#7), stats (#8) and switch-back (#9).
  */
 import { randomUUID } from 'node:crypto';
-import { matchChain, sameModel } from '../core/chain.js';
+import { label, matchChain, sameModel, toRef } from '../core/chain.js';
 import { classify } from '../core/classify.js';
 import { decide } from '../core/decide.js';
 import { createFallbackStates } from './fallback-state.js';
@@ -32,7 +32,6 @@ export const DECISION_EVENT = 'model-failure-retry/decision';
 /** Text of the follow-up message after a switch (ADR 0002: short, non-empty). */
 export const FOLLOWUP_TEXT = 'Continue.';
 
-const label = (ref) => `${ref.provider}/${ref.model}`;
 const keyOf = label;
 
 /**
@@ -106,14 +105,14 @@ export function apply(ctx, config) {
   /** The selection for a candidate: keep the reasoning effort if it supports it, else its default. */
   function selectionFor(to, info, effort) {
     const supported = effort && info?.reasoning?.efforts?.some((e) => e.id === effort);
-    return supported ? { provider: to.provider, model: to.model, reasoningEffort: effort } : { provider: to.provider, model: to.model };
+    return supported ? { ...toRef(to), reasoningEffort: effort } : toRef(to);
   }
 
   ctx.on('agent/request-error', async (payload, next) => {
     const { agent, turn, step, provider, failure, signal } = payload;
     if (lifetime.signal.aborted) return next();
     const current = agent.model?.current?.() ?? { provider, model: '' };
-    const model = { provider: current.provider, model: current.model };
+    const model = toRef(current);
     if (fallbacks.syncManualChange(agent, model)) publish(agent, { model, failure, decision: { kind: 'origin-reset' } });
     const state = requests.get(agent, { turn, step, model });
     const core = snapshotConfig(config);
@@ -181,9 +180,9 @@ export function apply(ctx, config) {
     if (decision.kind === 'fallback') {
       const selection = selectionFor(decision.to, infos.get(keyOf(decision.to)), current.reasoningEffort);
       ctx.logger?.info?.(`fallback ${label(model)} → ${label(selection)} (${decision.reason})`);
-      fb.tried.push({ provider: selection.provider, model: selection.model });
+      fb.tried.push(toRef(selection));
       fb.selected = selection;
-      fb.pending = { signal, from: model, to: { provider: selection.provider, model: selection.model }, summary: `${label(model)} failed (${decision.reason}); switched to ${label(selection)}` };
+      fb.pending = { signal, from: model, to: toRef(selection), summary: `${label(model)} failed (${decision.reason}); switched to ${label(selection)}` };
       agent.model.select(selection);
       publish(agent, { model, failure, decision: { ...decision, selection } });
       return undefined;
@@ -213,7 +212,7 @@ export function apply(ctx, config) {
     const agent = agentOfSession.get(session);
     if (!agent || !fallbacks.get(agent).origin) return;
     const current = agent.model?.current?.();
-    stopped(agent, { model: current ? { provider: current.provider, model: current.model } : fallbacks.get(agent).origin });
+    stopped(agent, { model: current ? toRef(current) : fallbacks.get(agent).origin });
   });
 
   ctx.on('agent/status', ({ agent, status }) => {

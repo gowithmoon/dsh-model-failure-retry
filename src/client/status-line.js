@@ -2,6 +2,7 @@
  * The text of the in-session status line (#7) from the `modelFailureRetry`
  * projection view. Pure, so the countdown is testable without React.
  */
+import { label } from '../core/chain.js';
 
 /** How long after its retry time a wait still shows "retrying now". */
 export const RETRY_GRACE_MS = 5000;
@@ -32,4 +33,3 @@ export function statusLine(status, { now, running, t }) {
   return { kind: 'retry', text, nextTickMs: 1000 };
 }
 
-const label = (ref) => `${ref.provider}/${ref.model}`;

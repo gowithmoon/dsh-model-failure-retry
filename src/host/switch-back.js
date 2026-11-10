@@ -20,7 +20,7 @@
  * fresh walk with the origin as start.
  */
 import { switchBackDue } from '../core/switch-back.js';
-import { sameModel } from '../core/chain.js';
+import { label, sameModel, toRef } from '../core/chain.js';
 
 /**
  * @param {import('@deepseek-ai/cordis').Context} ctx
@@ -49,7 +49,7 @@ export function installSwitchBack(ctx, { fallbacks, publish, settings, decisionE
     if (!active() || message?.source?.kind === 'model-fallback') return;
     const current = agent.model?.current?.();
     if (!current) return;
-    const model = { provider: current.provider, model: current.model };
+    const model = toRef(current);
     if (fallbacks.syncManualChange(agent, model)) {
       lastFailureAt.delete(agent);
       publish(agent, { model, decision: { kind: 'origin-reset' } });
@@ -57,7 +57,7 @@ export function installSwitchBack(ctx, { fallbacks, publish, settings, decisionE
     }
     const { origin } = fallbacks.get(agent);
     if (!switchBackDue({ settings: settings(), origin, current: model, lastFailureAt: lastFailureAt.get(agent), now: Date.now() })) return;
-    ctx.logger?.info?.(`switch back ${model.provider}/${model.model} → ${origin.provider}/${origin.model}`);
+    ctx.logger?.info?.(`switch back ${label(model)} → ${label(origin)}`);
     publish(agent, { model, decision: { kind: 'switch-back', from: model, to: origin } });
     fallbacks.clear(agent);
     lastFailureAt.delete(agent);
