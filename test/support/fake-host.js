@@ -27,8 +27,17 @@ export function createFakeHost() {
   function createAgent({ provider = 'mock', model = 'm1', reasoningEffort } = {}) {
     const controller = new AbortController();
     let current = reasoningEffort ? { provider, model, reasoningEffort } : { provider, model };
+    const events = [];
     const agent = {
-      session: {},
+      // The session log: `append` commits {type, seq, time, data} like dsh-session.
+      session: {
+        events,
+        append(type, data) {
+          const event = { type, seq: events.length, time: Date.now(), data: JSON.parse(JSON.stringify(data)) };
+          events.push(event);
+          return event;
+        },
+      },
       selections: [],
       followups: [],
       model: {
@@ -36,6 +45,8 @@ export function createFakeHost() {
         select: (ref) => { current = ref; agent.selections.push(ref); },
       },
       followup: (message) => { agent.followups.push(message); },
+      // DSH's stop: abort the active turn's signal with the cause.
+      cancel: (cause) => { controller.abort(cause); },
       controller,
       get signal() { return controller.signal; },
     };
@@ -80,5 +91,32 @@ export function createFakeHost() {
     }, () => Promise.resolve(undefined));
   }
 
-  return { ctx, builtinRetry, createAgent, requestError, status, provideLlm };
+  /**
+   * A stand-in `sessionProjections` service: records registered definitions;
+   * `projection(agent, key)` folds the agent's session log through one the
+   * way dsh-session-projection does, and returns its wire view.
+   */
+  const projections = new Map();
+  ctx.provide('sessionProjections', {
+    register(def) {
+      projections.set(def.key, def);
+      const ready = Promise.resolve({ dispose: async () => { projections.delete(def.key); } });
+      return Object.assign(() => { projections.delete(def.key); }, { then: (a, b) => ready.then(a, b), catch: (b) => ready.catch(b) });
+    },
+  });
+  function projection(agent, key) {
+    const def = projections.get(key);
+    if (!def) return undefined;
+    let state = def.stateSchema.parse(def.init({}, 0));
+    for (const event of agent.session.events) state = def.apply(state, event);
+    def.stateSchema.parse(state);
+    return def.wire.viewSchema.parse(def.wire.view(state));
+  }
+
+  /** Append a session event for `agent` the way dsh-agent-loop does (step/start, turn/end, user/message). */
+  function sessionEvent(agent, type, data) {
+    return agent.session.append(type, data);
+  }
+
+  return { ctx, builtinRetry, createAgent, requestError, status, provideLlm, projection, projections, sessionEvent };
 }

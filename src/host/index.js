@@ -14,10 +14,12 @@
  */
 import { randomUUID } from 'node:crypto';
 import { matchChain, sameModel } from '../core/chain.js';
+import { classify } from '../core/classify.js';
 import { decide } from '../core/decide.js';
 import { createFallbackStates } from './fallback-state.js';
 import { createRequestStates } from './request-state.js';
 import { installSwitchBack } from './switch-back.js';
+import { FALLBACK_SOURCE_KIND, installStatusProjection, recordRetry, recordRetryStarted } from './status-projection.js';
 import { Config, snapshotConfig } from './schema.js';
 import { wait } from './wait.js';
 
@@ -56,6 +58,21 @@ export function apply(ctx, config) {
     } catch (error) {
       ctx.logger?.warn?.(`decision observer failed: ${error}`);
     }
+  }
+
+  installStatusProjection(ctx);
+
+  /**
+   * The user stopped the turn (agent.cancel / DSH stop) while we were waiting
+   * or had just switched: drop the episode and select the origin back.
+   */
+  function stopped(agent, { model, failure }) {
+    if (lifetime.signal.aborted) return;
+    const { origin } = fallbacks.get(agent);
+    ctx.logger?.info?.(`stopped by the user on ${label(model)}`);
+    publish(agent, { model, ...(failure ? { failure } : {}), decision: { kind: 'stopped' } });
+    fallbacks.clear(agent);
+    if (origin && !sameModel(origin, agent.model.current())) agent.model.select(origin);
   }
 
   installSwitchBack(ctx, {
@@ -108,11 +125,20 @@ export function apply(ctx, config) {
       case 'pass':
         return next();
       case 'retry': {
+        if (signal.aborted) {
+          stopped(agent, { model, failure });
+          return undefined;
+        }
         ctx.logger?.info?.(
           `retry ${decision.attempt}/${decision.maxAttempts} in ${decision.delayMs}ms after ${failure.code} on ${label(model)}`,
         );
+        const retry = recordRetry(agent, { state, turn, step, provider: model.provider, failure, decision, category: classify(failure, core.rules).category });
         const elapsed = await wait(decision.delayMs, AbortSignal.any([signal, lifetime.signal]));
-        if (!elapsed) return undefined;
+        if (!elapsed) {
+          if (signal.aborted) stopped(agent, { model, failure });
+          return undefined;
+        }
+        recordRetryStarted(agent, retry);
         state.attempts = decision.attempt;
         return { kind: 'retry' };
       }
@@ -145,7 +171,7 @@ export function apply(ctx, config) {
       ctx.logger?.info?.(`fallback ${label(model)} → ${label(selection)} (${decision.reason})`);
       fb.tried.push({ provider: selection.provider, model: selection.model });
       fb.selected = selection;
-      fb.pending = { signal, summary: `${label(model)} failed (${decision.reason}); switched to ${label(selection)}` };
+      fb.pending = { signal, from: model, to: { provider: selection.provider, model: selection.model }, summary: `${label(model)} failed (${decision.reason}); switched to ${label(selection)}` };
       agent.model.select(selection);
       publish(agent, { model, failure, decision: { ...decision, selection } });
       return undefined;
@@ -170,12 +196,16 @@ export function apply(ctx, config) {
       return;
     }
     fb.pending = undefined;
-    if (pending.signal.aborted || lifetime.signal.aborted) return;
+    if (lifetime.signal.aborted) return;
+    if (pending.signal.aborted) {
+      stopped(agent, { model: pending.to });
+      return;
+    }
     agent.followup(Object.freeze({
       role: 'user',
       id: randomUUID(),
       content: [{ type: 'text', text: FOLLOWUP_TEXT }],
-      source: { kind: 'model-fallback', form: 'notice', summary: pending.summary },
+      source: { kind: FALLBACK_SOURCE_KIND, form: 'notice', summary: pending.summary, from: pending.from, to: pending.to },
     }));
   });
 }
