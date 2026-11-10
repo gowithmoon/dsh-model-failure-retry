@@ -66,7 +66,7 @@ class StatsService extends Service {
  * @param {{ decisionEvent: string, retentionDays: () => number, rules: () => readonly object[] }} options
  */
 export function installStats(ctx, { decisionEvent, retentionDays, rules }) {
-  const store = createStore(retentionDays);
+  const store = createStore(retentionDays, (error) => ctx.logger?.warn?.(`stats storage failed: ${error}`));
 
   ctx.inject(['storageDomain'], (sub) => {
     store.open(sub.storageDomain.open(STATS_DOMAIN));
@@ -129,15 +129,18 @@ function sessionIdOf(session) {
   return typeof id === 'string' ? id : undefined;
 }
 
-/** Records in a storageDomain table; writes are serialised, queries wait for them. */
-function createStore(retentionDays) {
+/**
+ * Records in a storageDomain table; writes are serialised, queries wait for them.
+ * A storage error is reported through `warn` and never breaks recovery or unload.
+ */
+function createStore(retentionDays, warn) {
   let opening;
   let table;
   let chain = Promise.resolve();
   let seq = 0;
 
   const enqueue = (job) => {
-    chain = chain.then(job).catch(() => {});
+    chain = chain.then(job).catch(warn);
     return chain;
   };
   const days = () => {
@@ -167,7 +170,9 @@ function createStore(retentionDays) {
       opening = undefined;
       await chain;
       table = undefined;
-      if (pending) await (await pending).close();
+      // A domain that failed to open has nothing to close (its error was reported by enqueue).
+      const domain = await pending?.catch(() => undefined);
+      await domain?.close().catch(warn);
     },
     add(record) {
       if (!opening) return;

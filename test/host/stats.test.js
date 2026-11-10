@@ -157,6 +157,19 @@ describe('stats (fake host)', () => {
     expect((await stats().query({ category: 'rate-limit' })).total).toBe(1);
   });
 
+  it('unloads cleanly when the storage failed to open, and keeps recovering (S11)', async () => {
+    storage.service.open = async () => { throw new Error('disk gone'); };
+    const fiber = await mount();
+    const agent = agentIn('s1');
+    expect(await settle(host.requestError(agent, RL))).toEqual({ kind: 'retry' });
+    expect((await stats().query({})).total).toBe(0);
+    await fiber.dispose();
+    await vi.advanceTimersByTimeAsync(0);
+    const logged = host.ctx.logger.buffer.map((m) => [m.type, m.args.map(String).join(' ')]);
+    expect(logged.filter(([type]) => type === 'error')).toEqual([]); // the unload itself did not fail
+    expect(logged.some(([type, text]) => type === 'warn' && text.includes('disk gone'))).toBe(true); // nor was the failure silent
+  });
+
   it('works without a storage service (records nothing, query is empty)', async () => {
     const bare = createFakeHost();
     await bare.ctx.plugin(plugin, {});
