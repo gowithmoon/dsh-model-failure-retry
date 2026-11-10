@@ -139,6 +139,12 @@ export const en = {
   'stats.prev': 'Previous',
   'stats.next': 'Next',
   'stats.pageOf': 'Page {page} of {pages} ({total} records)',
+  'status.retry': '{category} · retry {attempt}/{max} · {when}',
+  'status.in': 'in {seconds} s',
+  'status.now': 'retrying now',
+  'status.switched': 'Switched from {from} to {to}',
+  'status.stop': 'Stop',
+  'status.stopHint': 'Stop waiting, end this turn and select the original model back',
 };
 
 export const zh = {
@@ -281,4 +287,10 @@ export const zh = {
   'stats.prev': '上一页',
   'stats.next': '下一页',
   'stats.pageOf': '第 {page}/{pages} 页（共 {total} 条）',
+  'status.retry': '{category} · 第 {attempt}/{max} 次重试 · {when}',
+  'status.in': '{seconds} 秒后',
+  'status.now': '正在重试',
+  'status.switched': '已从 {from} 切换到 {to}',
+  'status.stop': '停止',
+  'status.stopHint': '放弃等待、结束本轮并选回原模型',
 };
