@@ -170,13 +170,10 @@ export function apply(ctx, config) {
       stopped(agent, { model, failure });
       return undefined;
     }
-    const fb = fallbacks.get(agent);
-    const firstSwitch = !fb.origin;
-    if (firstSwitch) fb.origin = current;
-    if (!fb.tried.some((t) => sameModel(t, model))) fb.tried.push(model);
+    fallbacks.leave(agent, { current, model });
     while (decision.kind === 'skip') {
       ctx.logger?.info?.(`skip ${label(decision.target)} (${decision.reason})`);
-      if (!fb.tried.some((t) => sameModel(t, decision.target))) fb.tried.push(decision.target);
+      fallbacks.markTried(agent, decision.target);
       publish(agent, { model, failure, decision: { kind: 'skip', target: decision.target, reason: decision.reason } });
       decision = decision.then;
     }
@@ -184,16 +181,17 @@ export function apply(ctx, config) {
     if (decision.kind === 'fallback') {
       const selection = selectionFor(decision.to, infos.get(keyOf(decision.to)), current.reasoningEffort);
       ctx.logger?.info?.(`fallback ${label(model)} → ${label(selection)} (${decision.reason})`);
-      fb.tried.push(toRef(selection));
-      fb.selected = selection;
-      fb.pending = { signal, from: model, to: toRef(selection), summary: `${label(model)} failed (${decision.reason}); switched to ${label(selection)}` };
+      fallbacks.switchTo(agent, selection, {
+        signal, from: model, to: toRef(selection),
+        summary: `${label(model)} failed (${decision.reason}); switched to ${label(selection)}`,
+      });
       agent.model.select(selection);
       publish(agent, { model, failure, decision: { ...decision, selection } });
       return undefined;
     }
 
     // give-up: chain exhausted (or no chain). Back to the origin, if we ever left it.
-    const origin = fb.origin;
+    const { origin } = fallbacks.get(agent);
     logGiveUp(decision, failure, model);
     publish(agent, { model, failure, decision });
     fallbacks.clear(agent);
@@ -221,14 +219,8 @@ export function apply(ctx, config) {
 
   ctx.on('agent/status', ({ agent, status }) => {
     if (status !== 'idle') return;
-    const fb = fallbacks.get(agent);
-    const pending = fb.pending;
-    if (!pending) {
-      // A turn ended without a switch: the next failure starts a fresh walk (origin is kept for #9).
-      fb.tried = [];
-      return;
-    }
-    fb.pending = undefined;
+    const pending = fallbacks.takePending(agent);
+    if (!pending) return;
     if (lifetime.signal.aborted || !config.enabled.get()) return; // turned off meanwhile (P6): no follow-up
     if (pending.signal.aborted) {
       stopped(agent, { model: pending.to });

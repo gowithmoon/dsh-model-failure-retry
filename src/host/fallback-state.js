@@ -11,16 +11,29 @@
  * - `pending`  — a switch whose follow-up turn is due once the agent goes idle.
  *
  * A record without `origin` means "no switch in this session (any more)".
+ *
+ * `origin` and `selected` are written through `persist` (P2), so a session
+ * reopened after a DSH restart still knows its origin; a record not in memory
+ * yet is loaded from it. `tried` and `pending` belong to the running turn and
+ * are not kept.
+ *
+ * All changes go through the methods below; callers only read `get()`.
  */
-import { sameModel } from '../core/chain.js';
+import { sameModel, toRef } from '../core/chain.js';
 
 /**
- * @typedef {import('../core/types.js').ModelRef & { reasoningEffort?: string }} Selection
- * @typedef {{ origin?: Selection, tried: import('../core/types.js').ModelRef[], selected?: Selection,
- *   pending?: { signal: AbortSignal, summary: string, from: import('../core/types.js').ModelRef,
- *     to: import('../core/types.js').ModelRef } }} FallbackState
+ * @typedef {import('../core/types.js').ModelRef} ModelRef
+ * @typedef {ModelRef & { reasoningEffort?: string }} Selection
+ * @typedef {{ origin?: Selection, tried: ModelRef[], selected?: Selection,
+ *   pending?: { signal: AbortSignal, summary: string, from: ModelRef, to: ModelRef } }} FallbackState
+ * @typedef {{
+ *   load(agent: object): { origin?: Selection, selected?: Selection } | undefined,
+ *   save(agent: object, fields: { origin?: Selection, selected?: Selection }): void,
+ * }} FallbackPersistence
  */
-export function createFallbackStates() {
+
+/** @param {{ persist?: FallbackPersistence }} [options] */
+export function createFallbackStates({ persist } = {}) {
   /** @type {WeakMap<object, FallbackState>} */
   const byAgent = new WeakMap();
 
@@ -28,10 +41,27 @@ export function createFallbackStates() {
   function get(agent) {
     let state = byAgent.get(agent);
     if (!state) {
-      state = { tried: [] };
+      const saved = persist?.load(agent);
+      state = { tried: [], ...(saved?.origin ? { origin: saved.origin, selected: saved.selected } : {}) };
       byAgent.set(agent, state);
     }
     return state;
+  }
+
+  function save(agent) {
+    const { origin, selected } = get(agent);
+    persist?.save(agent, { origin, selected });
+  }
+
+  function reset(agent) {
+    const had = !!get(agent).origin;
+    byAgent.set(agent, { tried: [] });
+    if (had) save(agent);
+  }
+
+  function markTried(agent, ref) {
+    const { tried } = get(agent);
+    if (!tried.some((t) => sameModel(t, ref))) tried.push(toRef(ref));
   }
 
   return {
@@ -43,7 +73,7 @@ export function createFallbackStates() {
     syncManualChange(agent, current) {
       const state = get(agent);
       if (!state.origin || !state.selected || sameModel(state.selected, current)) return false;
-      byAgent.set(agent, { tried: [] });
+      reset(agent);
       return true;
     },
     /** The core's view of the episode, or undefined before any switch. */
@@ -51,8 +81,36 @@ export function createFallbackStates() {
       const { origin, tried } = get(agent);
       return origin ? { start: origin, tried } : undefined;
     },
-    clear(agent) {
-      byAgent.set(agent, { tried: [] });
+    /** End the episode: no origin, nothing tried. */
+    clear: reset,
+    /** Leaving `model`: `current` becomes the origin unless there is one already. */
+    leave(agent, { current, model }) {
+      const state = get(agent);
+      if (!state.origin) {
+        state.origin = current;
+        save(agent);
+      }
+      markTried(agent, model);
+    },
+    markTried,
+    /** Switched to `selection`; the follow-up turn is due once the agent goes idle. */
+    switchTo(agent, selection, pending) {
+      markTried(agent, selection);
+      const state = get(agent);
+      state.selected = selection;
+      state.pending = pending;
+      save(agent);
+    },
+    /**
+     * The turn ended: hand out the pending switch, if any. A turn that ended
+     * without a switch starts a fresh walk next time (the origin is kept for #9).
+     */
+    takePending(agent) {
+      const state = get(agent);
+      const { pending } = state;
+      if (pending) state.pending = undefined;
+      else state.tried = [];
+      return pending;
     },
   };
 }
