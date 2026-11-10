@@ -75,10 +75,14 @@ test/fixtures/smoke/     实机冒烟：run.sh 起 mock LLM，再跑 headless ds
   - 状态（`src/host/fallback-state.js`，按 agent 的 WeakMap，子代理各自一份）：`origin` 原模型（含推理强度）；`tried` 本次链行走已试的模型；`selected` 插件最后一次 select 的模型；`pending` 待续轮。某一轮没发生切换就结束（idle 且无 pending）时 `tried` 清空、`origin` 保留，下次失败从头按原模型的链走。链走完后整个状态清空（`origin` 也清）。
   - 用户手动换模型：下次失败时发现当前模型 ≠ `selected`，状态清空，于是用户选的模型成为新的原模型（发一条 `origin-reset` 决定事件）。注意这是**惰性**的，在下一次失败时才更新，不是换模型的那一刻。
 - 决定事件（给 #7 / #8 / #9）：每次处理 request-error 都 `ctx.emit('model-failure-retry/decision', payload)`（常量 `DECISION_EVENT`，从 `src/host/index.js` 导出），同步、监听者抛错不影响恢复。payload：
-  `{ agent, model, failure, decision, origin, tried }`。`model` 是这次失败的模型 `{provider, model}`；`decision` 是 core 的 Decision，其中 `fallback` 多带 `selection`（实际 select 的值，含推理强度），`skip` 每个跳过的候选一条（不带 `then`），另有适配层自己的 `{kind:'origin-reset'}`；`origin` / `tried` 是发事件时的切换状态（`give-up chain-exhausted` 时还没清空，所以能看到原模型）。`retry` 事件在等待**之前**发出，带 `delayMs` / `attempt` / `maxAttempts`。监听写法：`ctx.on('model-failure-retry/decision', (e) => ...)`，需在同一 Cordis 作用域（同一插件内的子模块最简单）。
+  `{ agent, model, failure, decision, origin, tried }`。`model` 是这次失败的模型 `{provider, model}`；`decision` 是 core 的 Decision，其中 `fallback` 多带 `selection`（实际 select 的值，含推理强度），`skip` 每个跳过的候选一条（不带 `then`），另有适配层自己的 `{kind:'origin-reset'}` 与回切的 `{kind:'switch-back', from, to}`（这两种可能不带 `failure`，见 #9）；`origin` / `tried` 是发事件时的切换状态（`give-up chain-exhausted` 时还没清空，所以能看到原模型）。`retry` 事件在等待**之前**发出，带 `delayMs` / `attempt` / `maxAttempts`。监听写法：`ctx.on('model-failure-retry/decision', (e) => ...)`，需在同一 Cordis 作用域（同一插件内的子模块最简单）。
 - #7 状态投影：订阅决定事件即可拿到等待、切换、跳过、放弃；"等待结束"没有单独事件（retry 返回后即开始重试）。用 session projection，不新增 session 事件类型。停止：本轮 signal 取消时等待立即结束，且不续轮。
 - #8 统计：订阅决定事件计数，建议新建 `src/host/stats.js`，不要写进决策核心。
-- #9 回切：新建 `src/host/switch-back.js`，监听 `agent/pre-step`；判断逻辑放 `src/core/switch-back.js`。原模型在 `fallbacks.get(agent).origin`（适配层内部；要跨文件用就把 `createFallbackStates()` 的实例传给回切模块），"原模型上次失败的时间"需要回切自己从决定事件里记（`model` 等于 `origin` 的那条）。回切 `select(origin)` 后应同步把 `selected` 设成 origin 或直接 `clear(agent)`，否则下次失败会被当成用户手动换模型。
+- #9 回切（已实现）：`src/host/switch-back.js` 的 `installSwitchBack(ctx, {fallbacks, publish, settings, decisionEvent, active})`，判断在 `src/core/switch-back.js` 的 `switchBackDue`。配置 `switchBack: {enabled (默认 false), intervalMs (默认 600000)}`。
+  - 挂点是**每轮第一条** `agent/inbox/claimed`，不是 `agent/pre-step`：dsh-agent-loop 先认领收件箱、再读 `agent.model.current()` 定本步模型，所以在这里 `select()` 本步就生效；`agent/pre-step` 拿到的 `modelSelection` 已经定了，select 只影响下一步（工具循环）。同一轮后续的认领（第 2 步起）忽略，所以工具循环中途不回切。切换后的续跑轮（`source.kind === 'model-fallback'`）也不算新一轮。
+  - 计时：从决定事件里记 `model` 等于 `origin` 那条的时间（原模型上次失败）；`origin-reset` 清掉计时。不发探测请求。
+  - 回切时先发决定事件 `{kind:'switch-back', from, to}`（`from` 是当前备用模型 `{provider, model}`，`to` 是原模型、含推理强度；**不带 `failure`**；`origin`/`tried` 是回切前的状态），再 `fallbacks.clear(agent)` 并 `select(origin)`。原模型再失败就照常从头走切换链。
+  - 新一轮开始时也会检查手动换模型（当前 ≠ `selected`），发 `origin-reset`（**不带 `failure`**），所以手动换模型最晚在下一轮开始时生效（开了回切与否都检查）。
 - 配置：在 `src/host/schema.js` 的 `Config` 里加兄弟键，并在 `snapshotConfig` 里读出来。volatile 只能放在固定的对象路径上，而且不能嵌套，所以列表（规则、链、覆盖）整个作为一个 volatile 数组字段。
 - 设置页：每张票写自己的 controller 和组件，挂在 `Section.jsx` 里，顺序是 重试策略 → 时间轴 → 切换链 → 分类规则 → 回切 → 统计。写配置只写自己负责的路径。
 
