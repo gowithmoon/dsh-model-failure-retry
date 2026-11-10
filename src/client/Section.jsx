@@ -1,5 +1,6 @@
 import { useState, useSyncExternalStore } from 'react';
 import { Switch } from '@deepseek-ai/dsh-client-ui-primitives';
+import { RulesSection } from './RulesSection.jsx';
 
 const row = { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, padding: '12px 0' };
 const hint = { opacity: 0.65, fontSize: 12, marginTop: 4 };
@@ -20,7 +21,7 @@ function ToggleRow({ id, label, hintText, checked, disabled, onChange }) {
  * The plugin's settings section. Sub-sections from later tickets go below the
  * switches in spec order: policy → timeline → chains → rules → switch-back → stats.
  */
-export function Section({ t, controller }) {
+export function Section({ t, controller, rulesController }) {
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   const [failed, setFailed] = useState(false);
   const write = (promise) => {
@@ -60,6 +61,7 @@ export function Section({ t, controller }) {
         disabled={disabled || !state.enabled}
         onChange={(on) => write(controller.setCategory('transient', on))}
       />
+      {rulesController && <RulesSection t={t} controller={rulesController} />}
     </div>
   );
 }

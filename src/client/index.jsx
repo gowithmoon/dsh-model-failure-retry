@@ -5,6 +5,7 @@
 import { ENTRY_ID } from '../entry.js';
 import { en, zh } from './locales.js';
 import { createSectionController } from './section-controller.js';
+import { createRulesController } from './rules-controller.js';
 import { Section } from './Section.jsx';
 
 const NS = 'dsh-model-failure-retry';
@@ -14,7 +15,9 @@ export const inject = ['slots', 'locale', 'configForms'];
 export function apply(ctx) {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'model-failure-retry: dictionaries');
   const t = ctx.locale.bind(NS);
-  const controller = createSectionController(ctx.configForms.get(ENTRY_ID));
+  const form = ctx.configForms.get(ENTRY_ID);
+  const controller = createSectionController(form);
+  const rulesController = createRulesController(form);
   ctx.effect(
     () => ctx.configForms.whileServed([ENTRY_ID], () => ctx.slots.inject('settings.section', () => ctx.slots.register({
       name: 'settings.section',
@@ -22,7 +25,7 @@ export function apply(ctx) {
       order: 60,
       label: () => t('title'),
       locale: NS,
-      inject: () => ({ controller }),
+      inject: () => ({ controller, rulesController }),
     }, Section))),
     'model-failure-retry: settings section',
   );
