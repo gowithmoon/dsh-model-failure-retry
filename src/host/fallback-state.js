@@ -17,7 +17,8 @@ import { sameModel } from '../core/chain.js';
 /**
  * @typedef {import('../core/types.js').ModelRef & { reasoningEffort?: string }} Selection
  * @typedef {{ origin?: Selection, tried: import('../core/types.js').ModelRef[], selected?: Selection,
- *   pending?: { signal: AbortSignal, summary: string } }} FallbackState
+ *   pending?: { signal: AbortSignal, summary: string, from: import('../core/types.js').ModelRef,
+ *     to: import('../core/types.js').ModelRef } }} FallbackState
  */
 export function createFallbackStates() {
   /** @type {WeakMap<object, FallbackState>} */
