@@ -15,8 +15,9 @@ src/core/                决策核心：纯逻辑，不依赖 DSH，一个文件
   categories.js          失败类别常量
   classify.js            classify(failure, rules) → { category, reason?, rule?, ruleIndex? }
   rules.js               分类规则：DEFAULT_RULES / defaultRules()、firstMatchingRule、ruleError、failureStatus
-  policy.js              DEFAULT_POLICY、resolvePolicy(target, config)
-  schedule.js            retrySchedule(policy)（展示用）、nextDelay(policy, attempt, {retryAfterMs, random})（运行时用）
+  match.js               matchesModel(pattern, ref)：provider/model 通配（#4，#6 的链匹配也用它）
+  policy.js              DEFAULT_POLICY、resolvePolicy(target, config)：overrides 第一条命中，否则全局策略
+  schedule.js            fixed/linear/exponential/custom；retrySchedule(policy)（展示用）、nextDelay(policy, attempt, {retryAfterMs, random})（运行时用）
   config.js              CoreConfig 形状 + defaultConfig()
   decide.js              decide(failure, requestState, config, {random}) → Decision
 src/host/                DSH 适配层
@@ -28,6 +29,9 @@ src/client/              Web 客户端（esbuild 打包，react / jsx-runtime / 
   index.jsx              apply：注册 locale，在 whileServed([ENTRY_ID]) 期间注册 settings.section
   section-controller.js  把 ConfigForm 投影成视图状态，写入走 form.mutate([{op:'set', path, value}])
   Section.jsx            总开关 + 限流 / 临时故障开关；下挂各票子小节
+  policy-controller.js   重试策略（#4）：写 ['policy', 字段]，覆盖整表写 ['overrides']；parseSequence/formatSequence
+  timeline.js            timeline(policy)：在 retrySchedule 上累计出 T0 起的各次重试时刻与抖动区间
+  PolicySection.jsx      重试策略 → 时间轴 → 按模型覆盖（每条可展开自己的时间轴）
   rules-controller.js    分类规则（#5）：整表写 ['rules']，test() 给测试框
   RulesSection.jsx       分类规则列表 + 测试框
   locales.js             zh / en 文案，两边的 key 必须一致（有测试检查）
@@ -52,7 +56,7 @@ test/fixtures/smoke/     实机冒烟：run.sh 起 mock LLM，再跑 headless ds
 
 规则是新增文件、新增配置的兄弟键，不改已有键的形状。
 
-- #4 策略、覆盖、时间轴：`policy.js` 的 `resolvePolicy(target, config)` 已经接收目标模型，覆盖规则放在 `config.overrides`。新的延迟算法加在 `schedule.js` 的 `baseDelay` 里，按 `policy.kind` 分支。时间轴直接用 `retrySchedule(policy)`，它返回每次等待的 `delayMs/minMs/maxMs`。
+- #4 策略、覆盖、时间轴（已实现）：`config.overrides = [{match, policy}]`，按顺序取第一条命中；覆盖里没写的字段取 DEFAULT_POLICY，不继承全局策略（新增覆盖时界面把全局策略复制进去）。custom 用 `policy.sequenceMs`，比最大次数短时重复最后一个值，空序列退回首次延迟。匹配规则不含 `/` 时视为 `*/<pattern>`。
 - #5 分类规则（已实现）：规则 `{status, code, pattern, regex, category}`，`status` 0 / 空串表示任意；`category` 可以是四个类别之一或 `context-window`。按顺序取第一条命中，都不命中才按错误码。配置 `rules` 是一个 volatile 数组，默认值就是 `DEFAULT_RULES`，用户列表整体替换默认（"恢复默认"写回 `defaultRules()`）。非法正则运行时永不命中。无 `failure.status` 时（pi-ai）从错误信息里取第一个三位状态码，裸 RATE_LIMIT 视为 429。
   - 上下文超限：`classify` 返回 `{category:'fatal', reason:'context-window'}`（CONTEXT_WINDOW_EXCEEDED 码或 `context-window` 规则）。`decide` 对当前模型返回 `pass`，好让后面的压缩插件处理；#6 在候选模型上见到这个 reason 应返回 `skip`。
 - #6 切换链：在 `decide.js` 里，`quota`/`fatal` 目前直接返回 `give-up`，以后改为查链，返回 `fallback`/`skip`。链逻辑放新文件 `src/core/chains.js`（`matchChain`、`candidateOrder`）。`request-state.js` 的每 agent 记录里再加原模型、所用链、已试候选。适配层的 `switch` 加一个 `fallback` 分支，按 ADR 0002 先 `select`、结束本轮，再 `followup`。
