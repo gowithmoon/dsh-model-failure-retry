@@ -21,3 +21,9 @@
       name: 'file://@PLUGIN@'  # run.sh substitutes the absolute path (name must be a literal string)
       config:
         enabled: !!js 'process.env.SMOKE_ENABLED !== "false"'
+        # #6: daily (quota) → ghost (missing, skipped) → ok; rl2 has no chain.
+        chains:
+          - match: mock/daily
+            candidates:
+              - { provider: mock, model: ghost }
+              - { provider: mock, model: ok }
