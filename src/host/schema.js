@@ -13,6 +13,7 @@ import z from '@deepseek-ai/schemastery';
 import { DEFAULT_POLICY } from '../core/policy.js';
 import { defaultRules, RULE_TARGETS } from '../core/rules.js';
 import { DEFAULT_SWITCH_BACK } from '../core/switch-back.js';
+import { DEFAULT_RETENTION_DAYS } from '../core/stats.js';
 
 const toggle = (value) => z.boolean().default(value).volatile();
 
@@ -77,6 +78,10 @@ export const Config = z.object({
   switchBack: z.object({
     enabled: toggle(DEFAULT_SWITCH_BACK.enabled),
     intervalMs: z.natural().default(DEFAULT_SWITCH_BACK.intervalMs).volatile(),
+  }),
+  /** (#8) stats: days a record is kept */
+  stats: z.object({
+    retentionDays: z.natural().min(1).default(DEFAULT_RETENTION_DAYS).volatile(),
   }),
 });
 

@@ -71,4 +71,32 @@ describe('client bundle', () => {
     const { chainsController } = host.registered[0].options.inject();
     expect(chainsController.getSnapshot()).toMatchObject({ chains: [], catalog: { status: 'unavailable' } });
   });
+
+  it('mounts the stats Remote and queries it through the stats controller', async () => {
+    const { exports } = loadBundle();
+    const host = fakeClientCtx();
+    const injections = [];
+    host.ctx.inject = (keys, fn) => injections.push({ keys, fn });
+    exports.apply(host.ctx);
+    host.serve();
+    const { statsController } = host.registered[0].options.inject();
+    expect(statsController.getSnapshot().status).toBe('unavailable');
+    const mounted = [];
+    const calls = [];
+    const sub = {
+      effect: () => {},
+      remote: { $mount: async (c) => { mounted.push(c); return () => {}; } },
+      inject: (keys, fn) => injections.push({ keys, fn }),
+    };
+    await injections.find((i) => i.keys.length === 1 && i.keys[0] === 'remote').fn(sub);
+    expect(mounted[0].descriptors.map((d) => d.id)).toEqual(['dsh-model-failure-retry#modelFailureRetryStats/query']);
+    const inner = {
+      effect: () => {},
+      remote: { modelFailureRetryStats: { query: async (q) => { calls.push(q); return { ok: true, value: { summary: { retries: 2 }, buckets: [], events: [], total: 0, page: 1, pageSize: 20 } }; } } },
+    };
+    injections.find((i) => i.keys[0] === 'remote.modelFailureRetryStats').fn(inner);
+    await statsController.refresh();
+    expect(calls).toHaveLength(1);
+    expect(statsController.getSnapshot()).toMatchObject({ status: 'ready', result: { summary: { retries: 2 } } });
+  });
 });

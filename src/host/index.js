@@ -20,6 +20,7 @@ import { createFallbackStates } from './fallback-state.js';
 import { createRequestStates } from './request-state.js';
 import { installSwitchBack } from './switch-back.js';
 import { FALLBACK_SOURCE_KIND, installStatusProjection, recordRetry, recordRetryStarted } from './status-projection.js';
+import { installStats } from './stats.js';
 import { Config, snapshotConfig } from './schema.js';
 import { wait } from './wait.js';
 
@@ -74,6 +75,12 @@ export function apply(ctx, config) {
     fallbacks.clear(agent);
     if (origin && !sameModel(origin, agent.model.current())) agent.model.select(origin);
   }
+
+  installStats(ctx, {
+    decisionEvent: DECISION_EVENT,
+    retentionDays: () => config.stats.retentionDays.get(),
+    rules: () => config.rules.get(),
+  });
 
   installSwitchBack(ctx, {
     fallbacks,
