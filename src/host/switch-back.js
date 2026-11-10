@@ -21,6 +21,7 @@
  */
 import { switchBackDue } from '../core/switch-back.js';
 import { label, sameModel, toRef } from '../core/chain.js';
+import { FALLBACK_SOURCE_KIND } from './status-projection.js';
 
 /**
  * @param {import('@deepseek-ai/cordis').Context} ctx
@@ -46,7 +47,7 @@ export function installSwitchBack(ctx, { fallbacks, publish, settings, decisionE
   ctx.on('agent/inbox/claimed', ({ agent, message, turn }) => {
     if (seenTurn.get(agent) === turn) return;
     seenTurn.set(agent, turn);
-    if (!active() || message?.source?.kind === 'model-fallback') return;
+    if (!active() || message?.source?.kind === FALLBACK_SOURCE_KIND) return;
     const current = agent.model?.current?.();
     if (!current) return;
     const model = toRef(current);
