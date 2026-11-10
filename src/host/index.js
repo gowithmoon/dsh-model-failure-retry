@@ -18,6 +18,7 @@ import { decide } from '../core/decide.js';
 import { createFallbackStates } from './fallback-state.js';
 import { createRequestStates } from './request-state.js';
 import { installSwitchBack } from './switch-back.js';
+import { installStats } from './stats.js';
 import { Config, snapshotConfig } from './schema.js';
 import { wait } from './wait.js';
 
@@ -57,6 +58,12 @@ export function apply(ctx, config) {
       ctx.logger?.warn?.(`decision observer failed: ${error}`);
     }
   }
+
+  installStats(ctx, {
+    decisionEvent: DECISION_EVENT,
+    retentionDays: () => config.stats.retentionDays.get(),
+    rules: () => config.rules.get(),
+  });
 
   installSwitchBack(ctx, {
     fallbacks,
