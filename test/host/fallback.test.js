@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createVolatile, updateVolatile } from '@deepseek-ai/cosmokit';
 import * as plugin from '../../src/host/index.js';
 import { createFakeHost } from '../support/fake-host.js';
 
@@ -171,6 +172,21 @@ describe('fallback along a chain (fake host)', () => {
     await expect(second).resolves.toBeUndefined();
     expect(events.at(-1)).toBe('stopped');
     expect(agent.model.current()).toEqual({ provider: 'mock', model: 'a' });
+  });
+
+  it('sends no follow-up when the plugin was turned off while a switch was pending (P6)', async () => {
+    const fiber = await mount();
+    const agent = host.createAgent({ provider: 'mock', model: 'a' });
+    host.status(agent, 'running');
+    await host.requestError(agent, QUOTA);
+    // A settings edit: the loader writes volatile fields in place, without a remount.
+    const setEnabled = (value) => updateVolatile(fiber.effectiveConfig.enabled, createVolatile(value));
+    setEnabled(false);
+    host.status(agent, 'idle');
+    expect(agent.followups).toEqual([]);
+    setEnabled(true);
+    await turn(agent, []); // the pending switch was dropped, not kept for later
+    expect(agent.followups).toEqual([]);
   });
 
   it('a user stop in the follow-up turn on the candidate selects the origin back (P1)', async () => {

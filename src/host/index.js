@@ -226,7 +226,7 @@ export function apply(ctx, config) {
       return;
     }
     fb.pending = undefined;
-    if (lifetime.signal.aborted) return;
+    if (lifetime.signal.aborted || !config.enabled.get()) return; // turned off meanwhile (P6): no follow-up
     if (pending.signal.aborted) {
       stopped(agent, { model: pending.to });
       return;
