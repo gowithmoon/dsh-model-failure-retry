@@ -22,7 +22,7 @@ export function formatDuration(ms) {
 }
 
 /** A text field that keeps a local draft and commits only parsed, valid values. */
-function DraftField({ text, parse, onCommit, disabled, invalidText, ...rest }) {
+export function DraftField({ text, parse, onCommit, disabled, invalidText, ...rest }) {
   const [draft, setDraft] = useState(text);
   useEffect(() => setDraft(text), [text]);
   const parsed = parse(draft);

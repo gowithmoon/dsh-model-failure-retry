@@ -8,6 +8,7 @@ import { createPolicyController } from './policy-controller.js';
 import { createSectionController } from './section-controller.js';
 import { createRulesController } from './rules-controller.js';
 import { createChainsController, createModelCatalog } from './chains-controller.js';
+import { createSwitchBackController } from './switch-back-controller.js';
 import { Section } from './Section.jsx';
 
 const NS = 'dsh-model-failure-retry';
@@ -23,6 +24,7 @@ export function apply(ctx) {
   const rulesController = createRulesController(form);
   const catalog = createModelCatalog();
   const chainsController = createChainsController(form, catalog);
+  const switchBackController = createSwitchBackController(form);
   // Model catalog for the candidate dropdowns (optional: the section still edits without it).
   ctx.inject(['remote', 'remote.session'], (sub) => {
     catalog.setLoader(() => sub.remote.session.modelCatalog());
@@ -37,7 +39,7 @@ export function apply(ctx) {
       order: 60,
       label: () => t('title'),
       locale: NS,
-      inject: () => ({ controller, policyController, rulesController, chainsController }),
+      inject: () => ({ controller, policyController, rulesController, chainsController, switchBackController }),
     }, Section))),
     'model-failure-retry: settings section',
   );

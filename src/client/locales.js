@@ -95,6 +95,11 @@ export const en = {
   'category.quota': 'Quota exhausted',
   'category.fatal': 'Fatal error',
   'category.context-window': 'Context window exceeded',
+  'switchBack.title': 'Switch back',
+  'switchBack.enabled': 'Switch back to the original model',
+  'switchBack.hint': 'After a fallback, at the start of a new turn (never mid tool loop), switch the session back to the model it started on once that model has not failed for the interval. No probe request is sent; if it fails again, the chain is walked as usual. Picking a model by hand makes that model the new original.',
+  'switchBack.interval': 'Interval (minutes)',
+  'switchBack.intervalInvalid': 'Enter a non-negative number of minutes.',
 };
 
 export const zh = {
@@ -193,4 +198,9 @@ export const zh = {
   'category.quota': '配额耗尽',
   'category.fatal': '终止性错误',
   'category.context-window': '上下文超限',
+  'switchBack.title': '回切',
+  'switchBack.enabled': '回切到起始模型',
+  'switchBack.hint': '切换之后，起始模型距上次失败已过间隔时，在新一轮开始时（不会在工具循环中途）把会话切回起始模型。不发探测请求；若再次失败，照常按切换链走。手动改选模型后，以新模型为起始模型重新计时。',
+  'switchBack.interval': '间隔（分钟）',
+  'switchBack.intervalInvalid': '请输入不小于 0 的分钟数。',
 };
