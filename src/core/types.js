@@ -15,6 +15,10 @@
  * @property {number} jitterRatio    0..1, symmetric: delay × (1 ± ratio).
  * @property {boolean} honorRetryAfter
  *
+ * @typedef {object} PolicyOverride  A per-model retry policy; the first matching one wins.
+ * @property {string} match            provider/model wildcard (see match.js).
+ * @property {Partial<RetryPolicy>} policy
+ *
  * @typedef {object} RequestState
  * @property {number} attempts       Retries already performed for this request on the current model.
  *
