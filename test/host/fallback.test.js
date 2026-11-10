@@ -146,6 +146,33 @@ describe('fallback along a chain (fake host)', () => {
     expect(agent.followups).toEqual([]);
   });
 
+  it('a stop while the candidates are being looked up ends the episode on the origin (S9)', async () => {
+    const lookups = [];
+    host.ctx.provide('llm', {
+      resolveModelInfo: (provider, id) => new Promise((resolve) => lookups.push(() => resolve({ provider, id }))),
+    });
+    await mount();
+    const events = [];
+    host.ctx.on(plugin.DECISION_EVENT, (e) => events.push(e.decision.kind));
+    const agent = host.createAgent({ provider: 'mock', model: 'a' });
+    host.status(agent, 'running');
+    const first = host.requestError(agent, QUOTA);
+    await vi.advanceTimersByTimeAsync(0);
+    lookups.splice(0).forEach((resolve) => resolve());
+    await first;
+    host.status(agent, 'idle');
+    expect(agent.model.current().model).toBe('b');
+
+    host.status(agent, 'running');
+    const second = host.requestError(agent, QUOTA, { turn: 2 });
+    await vi.advanceTimersByTimeAsync(0);
+    agent.cancel(new Error('stop')); // the user stops during the lookup
+    lookups.splice(0).forEach((resolve) => resolve());
+    await expect(second).resolves.toBeUndefined();
+    expect(events.at(-1)).toBe('stopped');
+    expect(agent.model.current()).toEqual({ provider: 'mock', model: 'a' });
+  });
+
   it('publishes every decision with the fallback state for other modules (#7/#8/#9)', async () => {
     host.provideLlm({ mock: { a: {}, c: {} } });
     await mount({ chains: [{ match: 'mock/a', candidates: ['b', 'c'].map((model) => ({ provider: 'mock', model })) }] });

@@ -161,7 +161,12 @@ export function apply(ctx, config) {
    * with the error (returns undefined).
    */
   function leave(agent, decision, { model, current, failure, signal, infos }) {
-    if (signal.aborted || lifetime.signal.aborted) return undefined;
+    if (lifetime.signal.aborted) return undefined;
+    if (signal.aborted) {
+      // The user stopped during the candidate lookup.
+      stopped(agent, { model, failure });
+      return undefined;
+    }
     const fb = fallbacks.get(agent);
     const firstSwitch = !fb.origin;
     if (firstSwitch) fb.origin = current;
