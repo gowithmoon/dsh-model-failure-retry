@@ -79,7 +79,7 @@ function Chip({ t, code, selected, disabled, onClick }) {
       {selected && <span aria-hidden="true">✓</span>}
       <span>{code}</span>
       <span style={badgeStyle(effect, selected)}>{t(`rules.catalog.effect.${effect}`)}</span>
-      {useless && <span aria-hidden="true" style={{ color: selected ? '#fff' : AMBER }}>⚠</span>}
+      {useless && <span aria-hidden="true" style={{ opacity: 0.9 }}>⚠</span>}
       {useless && <span style={srOnly}>{t('rules.catalog.retryUseless')}</span>}
     </button>
   );
