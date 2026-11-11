@@ -14,6 +14,7 @@ src/core/                决策核心：纯逻辑，不依赖 DSH，一个文件
   types.js               JSDoc 类型：Category、ModelRef、RetryPolicy、RequestState、Decision
   categories.js          失败类别常量
   classify.js            classify(failure, rules) → { category, reason?, rule?, ruleIndex? }
+  rule-presets.js        错误码目录：30 个码 / 六组 / 对应类别与“重试无效”标记，presetRule(code)、isValidCode；用户主动添加，不改 DEFAULT_RULES
   rules.js               分类规则：DEFAULT_RULES / defaultRules()、firstMatchingRule、ruleError、failureStatus
   match.js               matchesModel(pattern, ref)：provider/model 通配（#4，#6 的链匹配也用它）
   chain.js               切换链（#6）：matchChain(model, chains) → {index, chain}、candidateOrder(candidates, current)（循环顺序）、sameModel(a, b)
@@ -35,7 +36,11 @@ src/client/              Web 客户端（esbuild 打包，react / jsx-runtime / 
   timeline.js            timeline(policy)：在 retrySchedule 上累计出 T0 起的各次重试时刻与抖动区间
   PolicySection.jsx      重试策略 → 时间轴 → 按模型覆盖（每条可展开自己的时间轴）
   rules-controller.js    分类规则（#5）：整表写 ['rules']，test() 给测试框
-  RulesSection.jsx       分类规则列表 + 测试框
+  RulesSection.jsx       分类规则：错误码目录 → 规则列表（概览 + 展开编辑）→ 测试框
+  RuleCatalog.jsx        错误码 chip 目录：搜索、分组、整组添加/移除、自定义码
+  RuleRow.jsx            单条规则：自然语言摘要 + 展开的高级字段
+  rules-view.js          describeRule 摘要、filterCatalog 过滤（纯函数）
+  rules-shared.jsx       DraftInput、CategorySelect 与共用样式
   chains-controller.js   切换链（#6）：整表写 ['chains']；createModelCatalog() 装 remote.session.modelCatalog() 给下拉框
   ChainsSection.jsx      切换链列表：匹配规则 + provider → model 两级下拉候选，缺失项黄色警告
   locales.js             zh / en 文案，两边的 key 必须一致（有测试检查）

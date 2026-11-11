@@ -5,6 +5,7 @@
  */
 import { classify } from '../core/classify.js';
 import { defaultRules, ruleError } from '../core/rules.js';
+import { isBareRule, isValidCode, normalizeCode, presetGroup, presetRule } from '../core/rule-presets.js';
 
 const BLANK = Object.freeze({ status: 0, code: '', pattern: '', regex: false });
 const NEW_RULE = Object.freeze({ ...BLANK, category: 'quota' });
@@ -66,6 +67,63 @@ export function createRulesController(form) {
       return write(rules);
     },
     restoreDefaults: () => write(defaultRules()),
+    /** Insert a copy of rule `index` right after it. */
+    duplicate(index) {
+      const rules = current();
+      if (!rules[index]) return Promise.resolve(false);
+      rules.splice(index + 1, 0, { ...rules[index] });
+      return write(rules);
+    },
+    /** Does any rule (bare or custom) already name this error code? */
+    hasCode: (code) => derive().rules.some((rule) => rule.code === code),
+    /** Is this code covered by a bare rule only (so a chip click may remove it)? */
+    hasBareRule: (code) => derive().rules.some((rule) => isBareRule(rule, code)),
+    /**
+     * Append a bare `{code → category}` rule. Appending keeps the default
+     * keyword rules first, so a RATE_LIMIT preset cannot swallow a daily-limit
+     * 429 that the quota rule should classify; move it up to override. Nothing
+     * is written when some rule already has the code (resolves true). Resolves
+     * false for a malformed code or category.
+     * @param {string} code  catalog or custom code
+     * @param {string} [category]  only used for codes outside the catalog
+     */
+    addPreset(code, category) {
+      const normalized = normalizeCode(code);
+      if (!isValidCode(normalized)) return Promise.resolve(false);
+      if (derive().rules.some((rule) => rule.code === normalized)) return Promise.resolve(true);
+      let rule;
+      try { rule = presetRule(normalized, category); } catch { return Promise.resolve(false); }
+      return write([...current(), rule]);
+    },
+    /**
+     * Remove the bare rule(s) for a code. Rules that also set a status or
+     * pattern are the user's own and stay; with only those, nothing is written
+     * and the result is false.
+     */
+    removePreset(code) {
+      const rules = current();
+      const kept = rules.filter((rule) => !isBareRule(rule, code));
+      if (kept.length === rules.length) return Promise.resolve(false);
+      return write(kept);
+    },
+    /** Append every code of a group that no rule names yet, keeping the group order, in one write. */
+    addPresetGroup(groupId) {
+      const group = presetGroup(groupId);
+      if (!group) return Promise.resolve(false);
+      const rules = current();
+      const missing = group.codes.filter((code) => !rules.some((rule) => rule.code === code));
+      if (missing.length === 0) return Promise.resolve(true);
+      return write([...rules, ...missing.map((code) => presetRule(code))]);
+    },
+    /** Remove the bare rules of a group's codes in one write; custom rules stay. */
+    removePresetGroup(groupId) {
+      const group = presetGroup(groupId);
+      if (!group) return Promise.resolve(false);
+      const rules = current();
+      const kept = rules.filter((rule) => !group.codes.some((code) => isBareRule(rule, code)));
+      if (kept.length === rules.length) return Promise.resolve(true);
+      return write(kept);
+    },
     /**
      * Classify a sample failure with the current rules.
      * @param {{ status: string, message: string }} sample  raw input-box values
