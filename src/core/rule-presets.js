@@ -5,8 +5,19 @@
  *
  * The code list and grouping follow dsh-llm-retry-settings@0.1.19 (MIT); the
  * categories are this plugin's own mapping onto RULE_TARGETS. The catalog is
- * opt-in: it never changes DEFAULT_RULES.
+ * opt-in: it never changes DEFAULT_RULES, and it only classifies; whether a
+ * category is retried is up to the policy.
  *
+ * Each code has an effect relative to the built-in code mapping in classify.js
+ * (`presetEffect`):
+ * - `builtin`: the built-in mapping already gives the catalog category, so a
+ *   rule for it changes nothing;
+ * - `add`: the built-in mapping does not know the code, so a rule makes the
+ *   plugin handle it;
+ * - `override`: the built-in mapping gives another category, so a rule
+ *   changes the outcome (today only INVALID_REQUEST: fatal → transient).
+ *
+ * @typedef {'builtin' | 'add' | 'override'} PresetEffect
  * @typedef {import('./rules.js').RuleTarget} RuleTarget
  * @typedef {'transient' | 'quota' | 'request' | 'content' | 'auth' | 'misc'} PresetGroupId
  * @typedef {object} Preset
@@ -16,6 +27,7 @@
  * @property {boolean} retryUseless  retrying the same request usually cannot help
  * @property {string} descKey        locale key of the one-line description
  */
+import { builtinCategory } from './classify.js';
 import { RULE_TARGETS } from './rules.js';
 
 /** [code, category, retryUseless] per group, in display order. */
@@ -104,6 +116,19 @@ export const presetOf = (code) => byCode.get(code);
 
 /** @param {string} id */
 export const presetGroup = (id) => byGroup.get(id);
+
+/**
+ * What adding the bare rule for `code` does compared with the built-in code
+ * mapping. A code outside the catalog counts as `add`.
+ * @param {string} code
+ * @returns {PresetEffect}
+ */
+export function presetEffect(code) {
+  const preset = byCode.get(code);
+  const builtin = builtinCategory(code);
+  if (!preset || builtin === undefined) return 'add';
+  return builtin === preset.category ? 'builtin' : 'override';
+}
 
 /**
  * The bare rule one chip stands for: any status, any text, just the code.

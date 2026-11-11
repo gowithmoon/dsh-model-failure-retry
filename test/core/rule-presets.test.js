@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RULE_TARGETS } from '../../src/core/rules.js';
 import {
-  PRESETS, PRESET_CODES, PRESET_GROUPS, isBareRule, isValidCode, normalizeCode, presetOf, presetRule,
+  PRESETS, PRESET_CODES, PRESET_GROUPS, isBareRule, isValidCode, normalizeCode, presetEffect, presetOf, presetRule,
 } from '../../src/core/rule-presets.js';
 
 const GROUPS = {
@@ -82,5 +82,17 @@ describe('error-code preset catalog', () => {
     expect(isBareRule({ ...bare, pattern: 'x' }, 'AUTH')).toBe(false);
     expect(isBareRule({ ...bare, regex: true }, 'AUTH')).toBe(false);
     expect(isBareRule(bare, 'QUOTA')).toBe(false);
+  });
+
+  it('labels each code by what a rule for it does compared with the built-in mapping', () => {
+    expect(presetEffect('RATE_LIMIT')).toBe('builtin');
+    expect(presetEffect('CONTEXT_WINDOW_EXCEEDED')).toBe('builtin');
+    expect(presetEffect('INVALID_REQUEST')).toBe('override');
+    expect(presetEffect('EMPTY_RESPONSE')).toBe('add');
+    expect(presetEffect('MY_PROVIDER_BUSY')).toBe('add');
+    expect(PRESET_CODES.filter((code) => presetEffect(code) === 'builtin').sort()).toEqual(
+      ['AUTH', 'CONTEXT_WINDOW_EXCEEDED', 'INVALID_CREDENTIAL', 'QUOTA', 'RATE_LIMIT', 'SERVER', 'TIMEOUT', 'TRANSPORT'],
+    );
+    expect(PRESET_CODES.filter((code) => presetEffect(code) === 'override')).toEqual(['INVALID_REQUEST']);
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createRulesController } from '../../src/client/rules-controller.js';
 import { DEFAULT_RULES } from '../../src/core/rules.js';
-import { PRESET_GROUPS, presetRule } from '../../src/core/rule-presets.js';
+import { PRESET_GROUPS, presetEffect, presetRule } from '../../src/core/rule-presets.js';
 
 function fakeForm(snapshot) {
   const listeners = new Set();
@@ -87,20 +87,31 @@ describe('error-code presets in the controller', () => {
   it('appends a bare preset rule at the end, as one whole-list write', async () => {
     const form = fakeForm(ready({ rules: [A, B] }));
     const c = createRulesController(form);
-    expect(await c.addPreset('RATE_LIMIT')).toBe(true);
+    expect(await c.addPreset('EMPTY_RESPONSE')).toBe(true);
     expect(form.writes).toHaveLength(1);
-    expect(lastRules(form)).toEqual({ op: 'set', path: ['rules'], value: [A, B, bare('RATE_LIMIT')] });
+    expect(lastRules(form)).toEqual({ op: 'set', path: ['rules'], value: [A, B, bare('EMPTY_RESPONSE')] });
     expect(form.writes[0].rev).toBe(7);
   });
 
-  it('keeps the default 429 quota rule first for daily limits and still catches plain 429s', async () => {
+  it('does not write a catalog code the built-in mapping already classifies the same way', async () => {
     const form = fakeForm(ready({ rules: [...DEFAULT_RULES] }));
     const c = createRulesController(form);
-    await c.addPreset('RATE_LIMIT');
+    expect(await c.addPreset('RATE_LIMIT')).toBe(true);
+    expect(await c.addPreset('context_window_exceeded')).toBe(true);
+    expect(form.writes).toHaveLength(0);
+  });
+
+  it('appends an override code, after the default rules, changing the built-in category', async () => {
+    const form = fakeForm(ready({ rules: [...DEFAULT_RULES] }));
+    const c = createRulesController(form);
+    expect(c.test({ status: '400', message: 'bad request' })).toEqual({ category: 'fatal' });
+    expect(await c.addPreset('INVALID_REQUEST')).toBe(true);
+    expect(lastRules(form).value).toHaveLength(DEFAULT_RULES.length + 1);
+    expect(lastRules(form).value.at(-1)).toEqual(bare('INVALID_REQUEST'));
+    expect(lastRules(form).value.at(-1).category).toBe('transient');
     form.push(ready({ rules: lastRules(form).value }));
-    expect(c.test({ status: '429', message: 'daily limit reached' })).toEqual({ category: 'quota', ruleIndex: 0 });
-    expect(c.test({ status: '429', message: 'Too many requests' })).toEqual({ category: 'rate-limit', ruleIndex: 2 });
-    expect(c.getSnapshot().rules.at(-1).code).toBe('RATE_LIMIT');
+    expect(c.test({ status: '400', message: 'bad request' })).toEqual({ category: 'transient', ruleIndex: 2 });
+    expect(c.test({ status: '400', message: 'maximum context length exceeded' })).toEqual({ category: 'fatal', reason: 'context-window', ruleIndex: 1 });
   });
 
   it('does not write when any rule already has the code', async () => {
@@ -130,7 +141,7 @@ describe('error-code presets in the controller', () => {
     expect(await c.addPreset('has space')).toBe(false);
     expect(await c.addPreset('')).toBe(false);
     expect(await c.addPreset('OK_CODE', 'nonsense')).toBe(false);
-    expect(await c.addPreset('RATE_LIMIT', 'nonsense')).toBe(true); // catalog code ignores the argument
+    expect(await c.addPreset('EMPTY_RESPONSE', 'nonsense')).toBe(true); // catalog code ignores the argument
     expect(form.writes).toHaveLength(1);
   });
 });
@@ -157,22 +168,50 @@ describe('removing presets and duplicating rules', () => {
   });
 
   it('appends a whole group in one write, skipping codes already there, in group order', async () => {
-    const existing = { ...A, code: 'QUOTA' };
+    const existing = { ...A, code: 'STREAM_CLOSED' };
     const form = fakeForm(ready({ rules: [existing, B] }));
     const c = createRulesController(form);
-    await c.addPresetGroup('quota');
+    await c.addPresetGroup('transient');
     expect(form.writes).toHaveLength(1);
-    expect(lastRules(form).value).toEqual([existing, B, bare('RATE_LIMIT')]);
+    const added = ['EMPTY_RESPONSE', 'MALFORMED_RESPONSE', 'INVALID_RESPONSE', 'PI_AI_ERROR', 'PI_AI_NOT_WARMED', 'NO_ADAPTER'];
+    expect(lastRules(form).value).toEqual([existing, B, ...added.map((code) => bare(code))]);
     form.push(ready({ rules: lastRules(form).value }));
-    expect(await c.addPresetGroup('quota')).toBe(true); // nothing missing: no write
+    expect(await c.addPresetGroup('transient')).toBe(true); // nothing missing: no write
     expect(form.writes).toHaveLength(1);
     expect(await c.addPresetGroup('nope')).toBe(false);
   });
 
-  it('appends every code of a group, in order, after the old rules', async () => {
+  it('adds only the new codes of a group: 7 of 10 transient codes, none of quota', async () => {
+    const form = fakeForm(ready({ rules: [A] }));
+    const c = createRulesController(form);
+    expect(await c.addPresetGroup('quota')).toBe(true); // RATE_LIMIT and QUOTA are built in
+    expect(form.writes).toHaveLength(0);
+    await c.addPresetGroup('transient');
+    const value = lastRules(form).value;
+    expect(value).toHaveLength(1 + 7);
+    expect(value.slice(1)).toEqual(group('transient').codes.filter((code) => presetEffect(code) === 'add').map((code) => bare(code)));
+    expect(value.map((r) => r.code)).not.toContain('SERVER');
+  });
+
+  it('leaves an override code out of a group add', async () => {
+    const form = fakeForm(ready({ rules: [A] }));
+    await createRulesController(form).addPresetGroup('request');
+    const codes = lastRules(form).value.slice(1).map((r) => r.code);
+    expect(codes).toEqual(['UNSUPPORTED_OPTION', 'UNKNOWN_MODEL', 'REQUEST_EXTENSION', 'INVALID_REPLAY_STATE']);
+  });
+
+  it('still removes an existing bare rule for a built-in code', async () => {
+    const form = fakeForm(ready({ rules: [A, bare('RATE_LIMIT')] }));
+    const c = createRulesController(form);
+    expect(c.hasBareRule('RATE_LIMIT')).toBe(true);
+    expect(await c.removePreset('RATE_LIMIT')).toBe(true);
+    expect(lastRules(form).value).toEqual([A]);
+  });
+
+  it('appends every new code of a group, in order, after the old rules', async () => {
     const form = fakeForm(ready({ rules: [A] }));
     await createRulesController(form).addPresetGroup('auth');
-    expect(lastRules(form).value).toEqual([A, ...group('auth').codes.map((code) => bare(code))]);
+    expect(lastRules(form).value).toEqual([A, ...['MISSING_CREDENTIAL', 'ACCOUNT_SIGN_IN_REQUIRED', 'ACCOUNT_TOKEN_INVALID'].map((code) => bare(code))]);
   });
 
   it('removes a group\'s bare rules in one write and keeps custom rules', async () => {

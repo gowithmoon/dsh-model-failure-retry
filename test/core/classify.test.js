@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classify } from '../../src/core/classify.js';
+import { builtinCategory, classify } from '../../src/core/classify.js';
 
 const failure = (code, extra = {}) => ({ message: `${code} failure`, code, ...extra });
 
@@ -27,5 +27,17 @@ describe('classify by DSH error code', () => {
 
   it('CONTEXT_WINDOW_EXCEEDED is fatal with its own reason', () => {
     expect(classify(failure('CONTEXT_WINDOW_EXCEEDED'))).toEqual({ category: 'fatal', reason: 'context-window' });
+  });
+});
+
+describe('builtinCategory', () => {
+  it('gives the built-in category of a code, context-window for CONTEXT_WINDOW_EXCEEDED', () => {
+    expect(builtinCategory('RATE_LIMIT')).toBe('rate-limit');
+    expect(builtinCategory('INVALID_REQUEST')).toBe('fatal');
+    expect(builtinCategory('ACCOUNT_QUOTA')).toBe('quota');
+    expect(builtinCategory('CONTEXT_WINDOW_EXCEEDED')).toBe('context-window');
+    expect(builtinCategory('EMPTY_RESPONSE')).toBeUndefined();
+    expect(builtinCategory('toString')).toBeUndefined();
+    expect(builtinCategory(undefined)).toBeUndefined();
   });
 });

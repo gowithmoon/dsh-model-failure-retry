@@ -25,8 +25,19 @@ import { firstMatchingRule } from './rules.js';
 export function classify(failure, rules = []) {
   const hit = firstMatchingRule(failure, rules);
   if (hit) return { ...target(hit.rule.category), rule: hit.rule, ruleIndex: hit.index };
-  if (failure.code === 'CONTEXT_WINDOW_EXCEEDED') return target('context-window');
-  return { category: CODE_CATEGORY[failure.code] };
+  return target(builtinCategory(failure.code));
+}
+
+/**
+ * The built-in category of a DSH error code, used when no rule hits:
+ * `'context-window'` for CONTEXT_WINDOW_EXCEEDED, else the code mapping below,
+ * else undefined (the plugin does not own the code).
+ * @param {string | undefined} code
+ * @returns {import('./rules.js').RuleTarget | undefined}
+ */
+export function builtinCategory(code) {
+  if (code === 'CONTEXT_WINDOW_EXCEEDED') return 'context-window';
+  return typeof code === 'string' && Object.hasOwn(CODE_CATEGORY, code) ? CODE_CATEGORY[code] : undefined;
 }
 
 function target(category) {
